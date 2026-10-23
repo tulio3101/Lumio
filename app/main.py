@@ -10,7 +10,23 @@ from app.modules.voice.router import router as voice_router
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title=settings.app_name, debug=settings.debug)
+    app = FastAPI(
+        title=settings.app_name,
+        version="0.1.0",
+        description=(
+            "Backend de Lumio. Los contratos de este OpenAPI son la referencia "
+            "para el cliente iOS."
+        ),
+        debug=settings.debug,
+        openapi_tags=[
+            {"name": "health", "description": "Estado del servicio."},
+            {"name": "users", "description": "Cuentas, autenticación y sesión."},
+            {"name": "voice", "description": "Interpretación de comandos de voz."},
+            {"name": "vision-orchestration", "description": "Análisis de frames del entorno."},
+            {"name": "narration", "description": "Generación de narración para el usuario."},
+            {"name": "places", "description": "Ruta activa e historial de rutas."},
+        ],
+    )
 
     @app.get("/health", tags=["health"])
     def health() -> dict[str, str]:

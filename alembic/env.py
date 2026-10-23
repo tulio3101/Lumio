@@ -5,6 +5,7 @@ from sqlalchemy import create_engine, pool
 from alembic import context
 from app.core.config import get_settings
 from app.core.db import Base
+from app.modules.places import models as places_models  # noqa: F401  (registra tablas en Base.metadata)
 from app.modules.users import models as users_models  # noqa: F401  (registra tablas en Base.metadata)
 
 config = context.config

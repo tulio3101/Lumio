@@ -24,3 +24,11 @@ def create_session(db: Session, user_id: uuid.UUID) -> AuthSession:
     db.commit()
     db.refresh(auth_session)
     return auth_session
+
+
+def get_by_id(db: Session, user_id: uuid.UUID) -> User | None:
+    return db.get(User, user_id)
+
+
+def get_session(db: Session, session_id: uuid.UUID) -> AuthSession | None:
+    return db.get(AuthSession, session_id)

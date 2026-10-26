@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.core.db import DbSession
 from app.modules.users import service
+from app.modules.users.dependencies import CurrentUser
 from app.modules.users.schemas import (
     GoogleAuthRequest,
     RefreshRequest,
@@ -65,5 +66,5 @@ def logout(payload: RefreshRequest) -> None:
 
 
 @router.get("/me", response_model=UserRead, summary="Usuario autenticado")
-def me() -> UserRead:
-    raise NOT_IMPLEMENTED
+def me(user: CurrentUser) -> UserRead:
+    return user

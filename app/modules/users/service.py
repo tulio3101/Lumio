@@ -1,12 +1,14 @@
+import uuid
 from datetime import timedelta
 
+import jwt
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.security import create_token, hash_password, verify_password
+from app.core.security import create_token, decode_token, hash_password, verify_password
 from app.modules.users import repository
-from app.modules.users.models import User
+from app.modules.users.models import AuthSession, User
 from app.modules.users.schemas import TokenPair, UserCreate, UserLogin
 
 # Se verifica contra este hash cuando el correo no existe, para que el tiempo de
@@ -19,6 +21,10 @@ class EmailAlreadyRegistered(Exception):
 
 
 class InvalidCredentials(Exception):
+    pass
+
+
+class InvalidToken(Exception):
     pass
 
 
@@ -56,3 +62,24 @@ def login(db: Session, payload: UserLogin) -> TokenPair:
     if not verify_password(payload.password, password_hash or _DUMMY_HASH) or user is None:
         raise InvalidCredentials
     return issue_tokens(db, user)
+
+
+def resolve_session(db: Session, token: str, token_type: str) -> AuthSession:
+    """Devuelve la sesión activa a la que pertenece el token o lanza InvalidToken."""
+    try:
+        claims = decode_token(token)
+        session = repository.get_session(db, uuid.UUID(claims["jti"]))
+        valid = claims["type"] == token_type and str(session.user_id) == claims["sub"]
+    except (jwt.InvalidTokenError, KeyError, ValueError, AttributeError):
+        raise InvalidToken from None
+    if not valid or session.revoked_at is not None:
+        raise InvalidToken
+    return session
+
+
+def get_authenticated_user(db: Session, access_token: str) -> User:
+    session = resolve_session(db, access_token, "access")
+    user = repository.get_by_id(db, session.user_id)
+    if user is None:
+        raise InvalidToken
+    return user

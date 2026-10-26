@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException, status
 
+from app.core.db import DbSession
+from app.modules.users import service
 from app.modules.users.schemas import (
     GoogleAuthRequest,
     RefreshRequest,
@@ -17,10 +19,19 @@ NOT_IMPLEMENTED = HTTPException(
 
 
 @router.post(
-    "", response_model=UserRead, status_code=status.HTTP_201_CREATED, summary="Crear cuenta"
+    "",
+    response_model=UserRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear cuenta",
+    responses={status.HTTP_409_CONFLICT: {"description": "El correo ya está registrado"}},
 )
-def register(payload: UserCreate) -> UserRead:
-    raise NOT_IMPLEMENTED
+def register(payload: UserCreate, db: DbSession) -> UserRead:
+    try:
+        return service.register(db, payload)
+    except service.EmailAlreadyRegistered:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="No se pudo crear la cuenta con ese correo"
+        ) from None
 
 
 @router.post("/login", response_model=TokenPair, summary="Iniciar sesión con correo y contraseña")

@@ -34,9 +34,19 @@ def register(payload: UserCreate, db: DbSession) -> UserRead:
         ) from None
 
 
-@router.post("/login", response_model=TokenPair, summary="Iniciar sesión con correo y contraseña")
-def login(payload: UserLogin) -> TokenPair:
-    raise NOT_IMPLEMENTED
+@router.post(
+    "/login",
+    response_model=TokenPair,
+    summary="Iniciar sesión con correo y contraseña",
+    responses={status.HTTP_401_UNAUTHORIZED: {"description": "Credenciales incorrectas"}},
+)
+def login(payload: UserLogin, db: DbSession) -> TokenPair:
+    try:
+        return service.login(db, payload)
+    except service.InvalidCredentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Correo o contraseña incorrectos"
+        ) from None
 
 
 @router.post("/login/google", response_model=TokenPair, summary="Iniciar sesión con Google")

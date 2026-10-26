@@ -1,7 +1,9 @@
+import uuid
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.modules.users.models import User
+from app.modules.users.models import AuthSession, User
 
 
 def get_by_email(db: Session, email: str) -> User | None:
@@ -14,3 +16,11 @@ def create_user(db: Session, email: str, password_hash: str) -> User:
     db.commit()
     db.refresh(user)
     return user
+
+
+def create_session(db: Session, user_id: uuid.UUID) -> AuthSession:
+    auth_session = AuthSession(user_id=user_id)
+    db.add(auth_session)
+    db.commit()
+    db.refresh(auth_session)
+    return auth_session

@@ -70,9 +70,19 @@ def refresh(payload: RefreshRequest, db: DbSession) -> TokenPair:
         ) from None
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, summary="Cerrar sesión")
-def logout(payload: RefreshRequest) -> None:
-    raise NOT_IMPLEMENTED
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Cerrar sesión",
+    responses={status.HTTP_401_UNAUTHORIZED: {"description": "Refresh token inválido o revocado"}},
+)
+def logout(payload: RefreshRequest, db: DbSession) -> None:
+    try:
+        service.logout(db, payload.refresh_token)
+    except service.InvalidToken:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión no válida"
+        ) from None
 
 
 @router.get("/me", response_model=UserRead, summary="Usuario autenticado")

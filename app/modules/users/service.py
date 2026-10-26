@@ -93,3 +93,7 @@ def refresh(db: Session, refresh_token: str) -> TokenPair:
         raise InvalidToken
     repository.revoke_session(db, session)
     return issue_tokens(db, user)
+
+
+def logout(db: Session, refresh_token: str) -> None:
+    repository.revoke_session(db, resolve_session(db, refresh_token, "refresh"))

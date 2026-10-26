@@ -3,7 +3,7 @@ from sqlalchemy import select
 from app.core.security import decode_token
 from app.modules.users.models import AuthSession, User
 
-CREDENTIALS = {"email": "ana@example.com", "password": "clave-segura-1"}
+from .conftest import CREDENTIALS
 
 
 def register(client):

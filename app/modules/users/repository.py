@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -32,3 +33,8 @@ def get_by_id(db: Session, user_id: uuid.UUID) -> User | None:
 
 def get_session(db: Session, session_id: uuid.UUID) -> AuthSession | None:
     return db.get(AuthSession, session_id)
+
+
+def revoke_session(db: Session, auth_session: AuthSession) -> None:
+    auth_session.revoked_at = datetime.now(UTC)
+    db.commit()

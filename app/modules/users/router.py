@@ -55,9 +55,19 @@ def login_google(payload: GoogleAuthRequest) -> TokenPair:
     raise NOT_IMPLEMENTED
 
 
-@router.post("/refresh", response_model=TokenPair, summary="Renovar tokens")
-def refresh(payload: RefreshRequest) -> TokenPair:
-    raise NOT_IMPLEMENTED
+@router.post(
+    "/refresh",
+    response_model=TokenPair,
+    summary="Renovar tokens",
+    responses={status.HTTP_401_UNAUTHORIZED: {"description": "Refresh token inválido o revocado"}},
+)
+def refresh(payload: RefreshRequest, db: DbSession) -> TokenPair:
+    try:
+        return service.refresh(db, payload.refresh_token)
+    except service.InvalidToken:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión no válida"
+        ) from None
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, summary="Cerrar sesión")

@@ -83,3 +83,13 @@ def get_authenticated_user(db: Session, access_token: str) -> User:
     if user is None:
         raise InvalidToken
     return user
+
+
+def refresh(db: Session, refresh_token: str) -> TokenPair:
+    """Rota la sesión: el refresh token usado deja de ser válido."""
+    session = resolve_session(db, refresh_token, "refresh")
+    user = repository.get_by_id(db, session.user_id)
+    if user is None:
+        raise InvalidToken
+    repository.revoke_session(db, session)
+    return issue_tokens(db, user)

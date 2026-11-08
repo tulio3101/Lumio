@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.core.config import get_settings
+from app.core.errors import register_exception_handlers
 from app.modules.narration.router import router as narration_router
 from app.modules.places.router import router as places_router
 from app.modules.users.router import router as users_router
@@ -27,6 +28,7 @@ def create_app() -> FastAPI:
             {"name": "places", "description": "Ruta activa e historial de rutas."},
         ],
     )
+    register_exception_handlers(app)
 
     @app.get("/health", tags=["health"])
     def health() -> dict[str, str]:

@@ -60,6 +60,14 @@ class RouteCreate(_StrictNumbers):
         return self
 
 
+class RouteDestinationChange(RouteCreate):
+    """Nueva ruta hacia otro destino, calculada en el cliente desde la ubicación actual.
+
+    Sustituye origen, destino, pasos, distancia y duración de la misma ruta; el progreso
+    vuelve al primer paso.
+    """
+
+
 class ActiveRouteUpdate(BaseModel):
     status: RouteStatus | None = None
     current_step: int | None = Field(default=None, ge=0)

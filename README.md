@@ -5,7 +5,6 @@ Lumio is an application that uses a modular monolithic architecture, aiming to p
 
 ```sh
 docker compose up -d --build                          # migra y arranca la API en :8000
-docker compose exec api python -m app.scripts.seed_dev_user   # UUID para LumioDevUserID
 docker compose logs -f api
 docker compose down                                   # `down -v` borra también los datos
 ```
@@ -23,13 +22,23 @@ pip install -r requirements.txt
 cp .env.example .env
 docker compose up -d db            # solo Postgres (bases lumio y lumio_test)
 alembic upgrade head
-python -m app.scripts.seed_dev_user # imprime el UUID del usuario de desarrollo
 uvicorn app.main:app --reload
 ```
 
-Mientras no exista el inicio de sesión, los endpoints de rutas identifican al usuario
-con el header `X-User-Id` (UUID de un usuario existente). En iOS, ese UUID va en la
-clave `LumioDevUserID` del `Info.plist`.
+## Rutas
+
+Todos los endpoints de `/places` exigen `Authorization: Bearer <access_token>` (el de
+`POST /users/login`); sin token o con uno inválido responden 401 `invalid_session`. Para
+probar, crea una cuenta desde la app iOS o con `POST /users`.
+
+| Método | Ruta | Uso |
+|---|---|---|
+| `PUT` | `/places/routes/active` | Crear Ruta: guarda la ruta calculada en el dispositivo y cancela la abierta anterior |
+| `GET` | `/places/routes/active` | Ruta activa o pausada del usuario (404 `active_route_not_found`) |
+| `PUT` | `/places/routes/{route_id}/destination` | Modificar Ruta: misma ruta, nuevo recorrido desde la ubicación actual; progreso a 0. 404 `route_not_found`, 409 `route_not_open` |
+
+Si tu base local se creó antes de renumerar la migración de rutas (`0002` → `0003`),
+recréala con `docker compose down -v`.
 
 ## Pruebas
 

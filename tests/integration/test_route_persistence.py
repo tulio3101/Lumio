@@ -12,7 +12,6 @@ from app.modules.places.models import Route
 from app.modules.places.repository import RouteRepository
 from app.modules.places.schemas import RouteCreate
 from app.modules.places.service import RouteService
-from app.scripts.seed_dev_user import DEV_USER_EMAIL, seed_dev_user
 from tests.factories import route_payload
 
 
@@ -39,35 +38,35 @@ def test_migrations_match_models(engine):
 
 
 @pytest.mark.parametrize("second_status", ["active", "paused"])
-def test_database_allows_only_one_open_route_per_user(session_factory, dev_user, second_status):
+def test_database_allows_only_one_open_route_per_user(session_factory, user, second_status):
     with session_factory() as session:
-        session.add(make_route(dev_user.id, "active"))
+        session.add(make_route(user.id, "active"))
         session.commit()
-        session.add(make_route(dev_user.id, second_status))
+        session.add(make_route(user.id, second_status))
         with pytest.raises(IntegrityError, match="uq_routes_one_open_per_user"):
             session.commit()
 
 
-def test_finished_routes_do_not_block_a_new_active_route(session_factory, dev_user):
+def test_finished_routes_do_not_block_a_new_active_route(session_factory, user):
     with session_factory() as session:
         session.add_all(
             [
-                make_route(dev_user.id, "completed"),
-                make_route(dev_user.id, "cancelled"),
-                make_route(dev_user.id, "active"),
+                make_route(user.id, "completed"),
+                make_route(user.id, "cancelled"),
+                make_route(user.id, "active"),
             ]
         )
         session.commit()
 
 
-def test_database_rejects_unknown_status(session_factory, dev_user):
+def test_database_rejects_unknown_status(session_factory, user):
     with session_factory() as session:
-        session.add(make_route(dev_user.id, "volando"))
+        session.add(make_route(user.id, "volando"))
         with pytest.raises(IntegrityError, match="ck_routes_status"):
             session.commit()
 
 
-def test_concurrent_creation_is_reported_as_conflict(session_factory, dev_user):
+def test_concurrent_creation_is_reported_as_conflict(session_factory, user):
     """Simula dos peticiones simultáneas: la segunda no vio la ruta creada por la primera."""
 
     class StaleReadRepository(RouteRepository):
@@ -76,29 +75,20 @@ def test_concurrent_creation_is_reported_as_conflict(session_factory, dev_user):
 
     payload = RouteCreate.model_validate(route_payload())
     with session_factory() as first:
-        RouteService(RouteRepository(first)).start_active_route(dev_user.id, payload)
+        RouteService(RouteRepository(first)).start_active_route(user.id, payload)
 
     with session_factory() as second:
         with pytest.raises(ActiveRouteConflictError):
-            RouteService(StaleReadRepository(second)).start_active_route(dev_user.id, payload)
+            RouteService(StaleReadRepository(second)).start_active_route(user.id, payload)
 
     with session_factory() as check:
-        assert RouteRepository(check).get_open_for_user(dev_user.id) is not None
+        assert RouteRepository(check).get_open_for_user(user.id) is not None
 
 
-def test_deleting_user_deletes_their_routes(session_factory, dev_user):
+def test_deleting_user_deletes_their_routes(session_factory, user):
     with session_factory() as session:
-        session.add(make_route(dev_user.id))
+        session.add(make_route(user.id))
         session.commit()
-        session.delete(session.merge(dev_user))
+        session.delete(session.merge(user))
         session.commit()
         assert session.query(Route).count() == 0
-
-
-def test_seed_dev_user_is_idempotent(session_factory):
-    with session_factory() as session:
-        first = seed_dev_user(session)
-        second = seed_dev_user(session)
-
-    assert first.id == second.id
-    assert first.email == DEV_USER_EMAIL

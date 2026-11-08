@@ -31,5 +31,5 @@ def test_active_route_contract_documents_errors(client):
     put = spec["paths"]["/places/routes/active"]["put"]
 
     assert {"401", "409", "422", "503"} <= put["responses"].keys()
-    assert any(p["name"] == "X-User-Id" for p in put["parameters"])
+    assert {"HTTPBearer": []} in put["security"]
     assert "ErrorResponse" in spec["components"]["schemas"]

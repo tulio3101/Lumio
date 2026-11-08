@@ -1,17 +1,10 @@
-import uuid
-
 from sqlalchemy import select
 
 from app.modules.places.models import Route
-from app.modules.users.dependencies import USER_ID_HEADER
-from app.modules.users.models import User
 from tests.factories import route_payload
+from tests.integration.conftest import create_user, login
 
 URL = "/places/routes/active"
-
-
-def headers(user_id: uuid.UUID) -> dict[str, str]:
-    return {USER_ID_HEADER: str(user_id)}
 
 
 def routes_of(session_factory, user_id) -> list[Route]:
@@ -23,11 +16,11 @@ def routes_of(session_factory, user_id) -> list[Route]:
         )
 
 
-def test_put_persists_route_and_get_returns_it(api, dev_user, session_factory):
-    created = api.put(URL, json=route_payload(), headers=headers(dev_user.id))
+def test_put_persists_route_and_get_returns_it(api, user, auth, session_factory):
+    created = api.put(URL, json=route_payload(), headers=auth)
 
     assert created.status_code == 200
-    [stored] = routes_of(session_factory, dev_user.id)
+    [stored] = routes_of(session_factory, user.id)
     assert str(stored.id) == created.json()["id"]
     assert stored.status == "active"
     assert stored.destination["name"] == "Farmacia Central"
@@ -35,52 +28,49 @@ def test_put_persists_route_and_get_returns_it(api, dev_user, session_factory):
     assert stored.distance_meters == 320.0
     assert stored.started_at is not None
 
-    fetched = api.get(URL, headers=headers(dev_user.id))
+    fetched = api.get(URL, headers=auth)
 
     assert fetched.status_code == 200
     assert fetched.json() == created.json()
 
 
-def test_new_route_replaces_and_cancels_previous(api, dev_user, session_factory):
-    first = api.put(URL, json=route_payload(), headers=headers(dev_user.id)).json()
+def test_new_route_replaces_and_cancels_previous(api, user, auth, session_factory):
+    first = api.put(URL, json=route_payload(), headers=auth).json()
     second = api.put(
         URL,
         json=route_payload(destination={"name": "Parque", "latitude": 4.62, "longitude": -74.07}),
-        headers=headers(dev_user.id),
+        headers=auth,
     ).json()
 
-    stored = {str(r.id): r for r in routes_of(session_factory, dev_user.id)}
+    stored = {str(r.id): r for r in routes_of(session_factory, user.id)}
     assert stored[first["id"]].status == "cancelled"
     assert stored[first["id"]].finished_at is not None
     assert stored[second["id"]].status == "active"
-    assert api.get(URL, headers=headers(dev_user.id)).json()["destination"]["name"] == "Parque"
+    assert api.get(URL, headers=auth).json()["destination"]["name"] == "Parque"
 
 
-def test_routes_are_isolated_per_user(api, dev_user, session_factory):
-    with session_factory() as session:
-        other = User(email="otra@example.com")
-        session.add(other)
-        session.commit()
+def test_routes_are_isolated_per_user(api, auth, session_factory):
+    create_user(session_factory, "otra@example.com")
+    other = login(api, "otra@example.com")
 
-    api.put(URL, json=route_payload(), headers=headers(dev_user.id))
+    api.put(URL, json=route_payload(), headers=auth)
 
-    response = api.get(URL, headers=headers(other.id))
+    response = api.get(URL, headers=other)
 
     assert response.status_code == 404
     assert response.json()["code"] == "active_route_not_found"
 
 
-def test_unknown_user_is_rejected_and_nothing_is_persisted(api, session_factory):
-    unknown = uuid.uuid4()
-
-    response = api.put(URL, json=route_payload(), headers=headers(unknown))
+def test_request_without_token_is_rejected_and_nothing_is_persisted(api, user, session_factory):
+    response = api.put(URL, json=route_payload())
 
     assert response.status_code == 401
-    assert routes_of(session_factory, unknown) == []
+    assert response.json()["code"] == "invalid_session"
+    assert routes_of(session_factory, user.id) == []
 
 
-def test_invalid_route_is_not_persisted(api, dev_user, session_factory):
-    response = api.put(URL, json=route_payload(steps=[]), headers=headers(dev_user.id))
+def test_invalid_route_is_not_persisted(api, user, auth, session_factory):
+    response = api.put(URL, json=route_payload(steps=[]), headers=auth)
 
     assert response.status_code == 422
-    assert routes_of(session_factory, dev_user.id) == []
+    assert routes_of(session_factory, user.id) == []

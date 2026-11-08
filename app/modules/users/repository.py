@@ -38,3 +38,24 @@ def get_session(db: Session, session_id: uuid.UUID) -> AuthSession | None:
 def revoke_session(db: Session, auth_session: AuthSession) -> None:
     auth_session.revoked_at = datetime.now(UTC)
     db.commit()
+
+
+class UserRepository:
+    """Acceso a usuarios para dependencias inyectables (X-User-Id) y el seed de desarrollo.
+
+    Reutiliza las consultas del módulo; a diferencia de ``create_user``, ``add`` no hace
+    commit: lo decide quien lo llama.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def get_by_id(self, user_id: uuid.UUID) -> User | None:
+        return get_by_id(self.session, user_id)
+
+    def get_by_email(self, email: str) -> User | None:
+        return get_by_email(self.session, email)
+
+    def add(self, user: User) -> User:
+        self.session.add(user)
+        return user

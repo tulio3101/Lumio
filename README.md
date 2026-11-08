@@ -1,29 +1,44 @@
 # Lumio
 Lumio is an application that uses a modular monolithic architecture, aiming to provide support and foster independence for individuals with severe visual impairments. This is a project for the course "Software Innovation Supported by New Technologies" (2026-2).
 
-## Desarrollo
+## Desarrollo local con Docker (API + Postgres)
 
-```bash
-python -m venv venv && source venv/bin/activate   # en Windows: venv\Scripts\activate
+```sh
+docker compose up -d --build                          # migra y arranca la API en :8000
+docker compose exec api python -m app.scripts.seed_dev_user   # UUID para LumioDevUserID
+docker compose logs -f api
+docker compose down                                   # `down -v` borra también los datos
+```
+
+Para probar desde un iPhone físico en la misma red Wi-Fi, usa la IP del equipo en
+`LumioAPIBaseURL` (por ejemplo `http://192.168.10.32:8000`) y permite el puerto 8000
+en el firewall (`sudo ufw allow 8000/tcp`). Comprueba desde Safari en el iPhone que
+`http://<IP>:8000/health` responde.
+
+## Desarrollo local sin Docker para la API
+
+```sh
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env                              # ajustar DATABASE_URL y JWT_SECRET
+cp .env.example .env
+docker compose up -d db            # solo Postgres (bases lumio y lumio_test)
 alembic upgrade head
-uvicorn app.main:app --reload                     # OpenAPI en http://localhost:8000/docs
+python -m app.scripts.seed_dev_user # imprime el UUID del usuario de desarrollo
+uvicorn app.main:app --reload
 ```
 
-Pruebas y lint (no requieren PostgreSQL, usan SQLite en memoria):
+Mientras no exista el inicio de sesión, los endpoints de rutas identifican al usuario
+con el header `X-User-Id` (UUID de un usuario existente). En iOS, ese UUID va en la
+clave `LumioDevUserID` del `Info.plist`.
 
-```bash
-pytest
+## Pruebas
+
+```sh
 ruff check .
+pytest                                    # unitarias; las de integración se omiten
+export TEST_DATABASE_URL=postgresql+psycopg://lumio:lumio@localhost:5432/lumio_test
+pytest -rs                                # unitarias + integración contra Postgres
 ```
 
-## Autenticación
-
-Cada inicio de sesión crea una sesión por dispositivo (`auth_sessions`); su id viaja como claim `jti` en el access y el refresh token.
-
-- `POST /users` registra la cuenta; `POST /users/login` devuelve el par de tokens.
-- `GET /users/me` y los endpoints protegidos exigen `Authorization: Bearer <access_token>`.
-- `POST /users/refresh` rota la sesión: el refresh token usado deja de ser válido.
-- `POST /users/logout` revoca la sesión y con ello ambos tokens.
-- Login con Google y recuperación de contraseña siguen pendientes (501).
+`TEST_DATABASE_URL` debe apuntar a una base de datos dedicada: las pruebas de
+integración reconstruyen su esquema con las migraciones y vacían sus tablas.

@@ -9,11 +9,13 @@ from app.modules.places import models as places_models  # noqa: F401  (registra 
 from app.modules.users import models as users_models  # noqa: F401  (registra tablas en Base.metadata)
 
 config = context.config
-if config.config_file_name is not None:
+# Las pruebas invocan Alembic desde pytest y no deben reconfigurar su logging.
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
-database_url = get_settings().database_url
+# Las pruebas de integración fijan sqlalchemy.url; por defecto se usa la configuración.
+database_url = config.get_main_option("sqlalchemy.url") or get_settings().database_url
 
 
 def run_migrations_offline() -> None:

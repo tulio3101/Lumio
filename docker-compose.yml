@@ -1,0 +1,45 @@
+# Entorno local completo: `docker compose up -d --build` (API en el puerto 8000).
+# Solo la base de datos (para correr la API o las pruebas desde el venv): `docker compose up -d db`.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: lumio
+      POSTGRES_PASSWORD: lumio
+      POSTGRES_DB: lumio
+    ports:
+      - "5432:5432"
+    volumes:
+      - lumio-db:/var/lib/postgresql/data
+      - ./docker/postgres/create-test-database.sql:/docker-entrypoint-initdb.d/create-test-database.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lumio -d lumio"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    environment:
+      ENVIRONMENT: local
+      DEBUG: "true"
+      DATABASE_URL: postgresql+psycopg://lumio:lumio@db:5432/lumio
+      JWT_SECRET: change-me
+    ports:
+      # Expuesto en todas las interfaces para que un iPhone en la misma red pueda llegar.
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  lumio-db:

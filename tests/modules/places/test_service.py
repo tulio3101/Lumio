@@ -3,10 +3,15 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.modules.places.exceptions import ActiveRouteConflictError, ActiveRouteNotFoundError
-from app.modules.places.schemas import RouteCreate
+from app.modules.places.exceptions import (
+    ActiveRouteConflictError,
+    ActiveRouteNotFoundError,
+    RouteNotFoundError,
+    RouteNotOpenError,
+)
+from app.modules.places.schemas import RouteCreate, RouteDestinationChange
 from app.modules.places.service import RouteService
-from tests.factories import route_payload
+from tests.factories import destination_change_payload, route_payload
 from tests.modules.places.fakes import FakeRouteRepository
 
 NOW = datetime(2026, 11, 7, 15, 30, tzinfo=UTC)
@@ -106,3 +111,64 @@ def test_finished_routes_are_not_active(service):
 
     with pytest.raises(ActiveRouteNotFoundError):
         service.get_active_route(USER_ID)
+
+
+def change(**overrides) -> RouteDestinationChange:
+    return RouteDestinationChange.model_validate(destination_change_payload(**overrides))
+
+
+def test_change_destination_updates_the_same_route(service, repo):
+    route = service.start_active_route(USER_ID, payload())
+    route.current_step = 2
+    commits_before = repo.commits
+
+    changed = service.change_destination(USER_ID, route.id, change())
+
+    assert changed is route
+    assert repo.routes == [route]
+    assert repo.commits == commits_before + 1
+    assert route.destination["name"] == "Parque de los Novios"
+    assert route.origin["latitude"] == 4.6102
+    assert [step["instruction"] for step in route.steps] == [
+        "Camina hacia el sur por la Calle 19",
+        "El destino está a tu derecha",
+    ]
+    assert route.distance_meters == 80.0
+    assert route.expected_travel_time_seconds == 70.0
+    assert route.current_step == 0
+    assert route.status == "active"
+    assert route.started_at == NOW
+
+
+def test_change_destination_resumes_a_paused_route(service):
+    route = service.start_active_route(USER_ID, payload())
+    route.status = "paused"
+
+    service.change_destination(USER_ID, route.id, change())
+
+    assert route.status == "active"
+
+
+@pytest.mark.parametrize("status", ["completed", "cancelled"])
+def test_change_destination_of_a_finished_route_is_rejected(service, repo, status):
+    route = service.start_active_route(USER_ID, payload())
+    route.status = status
+    commits_before = repo.commits
+
+    with pytest.raises(RouteNotOpenError):
+        service.change_destination(USER_ID, route.id, change())
+    assert route.destination["name"] == "Farmacia Central"
+    assert repo.commits == commits_before
+
+
+def test_change_destination_of_another_users_route_is_not_found(service):
+    route = service.start_active_route(uuid.uuid4(), payload())
+
+    with pytest.raises(RouteNotFoundError):
+        service.change_destination(USER_ID, route.id, change())
+    assert route.destination["name"] == "Farmacia Central"
+
+
+def test_change_destination_of_unknown_route_is_not_found(service):
+    with pytest.raises(RouteNotFoundError):
+        service.change_destination(USER_ID, uuid.uuid4(), change())

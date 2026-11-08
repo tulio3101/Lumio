@@ -20,10 +20,14 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-def create_token(subject: str, token_type: str, expires_delta: timedelta) -> str:
+def create_token(
+    subject: str, token_type: str, expires_delta: timedelta, jti: str | None = None
+) -> str:
     settings = get_settings()
     now = datetime.now(UTC)
     payload = {"sub": subject, "type": token_type, "iat": now, "exp": now + expires_delta}
+    if jti is not None:
+        payload["jti"] = jti
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 

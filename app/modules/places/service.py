@@ -80,6 +80,18 @@ class RouteService:
         self.routes.commit()
         return route
 
+    def list_history(self, user_id: uuid.UUID, limit: int, offset: int) -> tuple[list[Route], int]:
+        """Historial (Consultar Rutas Recientes): rutas completadas o canceladas del usuario.
+
+        Cada ruta que deja de estar abierta queda guardada, incluida la que se cancela al
+        iniciar otra. Se ordenan de la más reciente a la más antigua por la fecha en que
+        terminaron. Devuelve la página pedida y el total.
+        """
+        return (
+            self.routes.list_closed_for_user(user_id, limit=limit, offset=offset),
+            self.routes.count_closed_for_user(user_id),
+        )
+
     def get_active_route(self, user_id: uuid.UUID) -> Route:
         route = self.routes.get_open_for_user(user_id)
         if route is None:

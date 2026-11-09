@@ -12,6 +12,7 @@ from app.modules.places.schemas import (
     ActiveRouteUpdate,
     RouteCreate,
     RouteDestinationChange,
+    RouteHistoryItem,
     RouteHistoryPage,
 )
 from app.modules.places.service import RouteService
@@ -123,9 +124,27 @@ def cancel_active_route() -> None:
     raise NOT_IMPLEMENTED
 
 
-@router.get("/routes/history", response_model=RouteHistoryPage, summary="Historial de rutas")
+@router.get(
+    "/routes/history",
+    response_model=RouteHistoryPage,
+    summary="Historial de rutas",
+    description=(
+        "Rutas completadas o canceladas del usuario, de la más reciente a la más antigua "
+        "según la fecha en que terminaron. La ruta activa o pausada no aparece. Una ruta "
+        "queda cancelada cuando se inicia otra."
+    ),
+    responses={**_UNAUTHORIZED},
+)
 def list_route_history(
-    limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    user_id: CurrentUserId,
+    service: RouteServiceDep,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> RouteHistoryPage:
-    raise NOT_IMPLEMENTED
+    routes, total = service.list_history(user_id, limit=limit, offset=offset)
+    return RouteHistoryPage(
+        items=[RouteHistoryItem.model_validate(route) for route in routes],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )

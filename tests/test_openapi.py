@@ -23,7 +23,7 @@ def test_docs_are_served(client):
 
 
 def test_stub_endpoints_return_501(client):
-    assert client.get("/places/routes/history").status_code == 501
+    assert client.delete("/places/routes/active").status_code == 501
 
 
 def test_active_route_contract_documents_errors(client):

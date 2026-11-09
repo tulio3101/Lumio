@@ -6,13 +6,24 @@ import pytest
 from app.modules.places.exceptions import (
     ActiveRouteConflictError,
     ActiveRouteNotFoundError,
+    RouteIdConflictError,
     RouteNotFoundError,
     RouteNotOpenError,
 )
 from app.modules.places.models import Route
-from app.modules.places.schemas import RouteCreate, RouteDestinationChange
+from app.modules.places.schemas import (
+    FinishedRouteCreate,
+    RouteCreate,
+    RouteDestinationChange,
+    RouteFinish,
+)
 from app.modules.places.service import RouteService
-from tests.factories import destination_change_payload, place, route_payload
+from tests.factories import (
+    destination_change_payload,
+    finished_route_payload,
+    place,
+    route_payload,
+)
 from tests.modules.places.fakes import FakeRouteRepository
 
 NOW = datetime(2026, 11, 7, 15, 30, tzinfo=UTC)
@@ -249,3 +260,140 @@ def test_history_is_paginated_with_the_full_total(service, repo):
 
 def test_empty_history(service):
     assert service.list_history(USER_ID, limit=20, offset=0) == ([], 0)
+
+
+# Finalizar Ruta
+
+
+def finish(status: str = "completed", minutes_after_start: int = 20) -> RouteFinish:
+    return RouteFinish(status=status, finished_at=NOW + timedelta(minutes=minutes_after_start))
+
+
+@pytest.fixture
+def later(repo) -> RouteService:
+    """Servicio media hora después de NOW: las horas de fin del dispositivo ya pasaron."""
+    return RouteService(repo, now=lambda: NOW + timedelta(minutes=30))
+
+
+def test_finish_closes_the_route_with_the_device_time(service, later, repo):
+    route = service.start_active_route(USER_ID, payload())
+
+    finished = later.finish_route(USER_ID, route.id, finish("completed", 20))
+
+    assert finished is route
+    assert route.status == "completed"
+    assert route.finished_at == NOW + timedelta(minutes=20)
+    assert later.list_history(USER_ID, limit=20, offset=0) == ([route], 1)
+    with pytest.raises(ActiveRouteNotFoundError):
+        later.get_active_route(USER_ID)
+
+
+def test_finish_without_arriving_keeps_it_as_cancelled(service, later):
+    route = service.start_active_route(USER_ID, payload())
+
+    later.finish_route(USER_ID, route.id, finish("cancelled"))
+
+    assert route.status == "cancelled"
+
+
+def test_finish_also_closes_a_paused_route(service, later):
+    route = service.start_active_route(USER_ID, payload())
+    route.status = "paused"
+
+    later.finish_route(USER_ID, route.id, finish())
+
+    assert route.status == "completed"
+
+
+def test_finishing_again_changes_nothing(service, later, repo):
+    route = service.start_active_route(USER_ID, payload())
+    later.finish_route(USER_ID, route.id, finish("completed", 20))
+    commits = repo.commits
+
+    again = later.finish_route(USER_ID, route.id, finish("cancelled", 25))
+
+    assert again is route
+    assert (route.status, route.finished_at) == ("completed", NOW + timedelta(minutes=20))
+    assert repo.commits == commits
+
+
+def test_finishing_a_route_cancelled_by_a_newer_one_keeps_it(service, later):
+    first = service.start_active_route(USER_ID, payload())
+    second = service.start_active_route(USER_ID, payload())
+
+    later.finish_route(USER_ID, first.id, finish("completed"))
+
+    assert first.status == "cancelled"
+    assert second.status == "active"
+
+
+@pytest.mark.parametrize("minutes_after_start, expected", [(90, 30), (-10, 0)])
+def test_finish_time_is_kept_between_start_and_now(service, later, minutes_after_start, expected):
+    route = service.start_active_route(USER_ID, payload())
+
+    later.finish_route(USER_ID, route.id, finish(minutes_after_start=minutes_after_start))
+
+    assert route.finished_at == NOW + timedelta(minutes=expected)
+
+
+def test_finish_of_another_users_route_is_not_found(service):
+    route = service.start_active_route(uuid.uuid4(), payload())
+
+    with pytest.raises(RouteNotFoundError):
+        service.finish_route(USER_ID, route.id, finish())
+    assert route.status == "active"
+
+
+def finished(**overrides) -> FinishedRouteCreate:
+    return FinishedRouteCreate.model_validate(finished_route_payload(**overrides))
+
+
+def test_offline_route_is_recorded_in_the_history(service, repo):
+    data = finished(started_at="2026-11-07T09:00:00Z", finished_at="2026-11-07T09:20:00Z")
+
+    route = service.record_finished_route(USER_ID, data)
+
+    assert route.id == data.id
+    assert route.user_id == USER_ID
+    assert route.status == "completed"
+    assert route.started_at == datetime(2026, 11, 7, 9, 0, tzinfo=UTC)
+    assert route.finished_at == datetime(2026, 11, 7, 9, 20, tzinfo=UTC)
+    assert route.destination["name"] == "Farmacia Central"
+    assert len(route.steps) == 3
+    assert service.list_history(USER_ID, limit=20, offset=0) == ([route], 1)
+
+
+def test_recording_an_offline_route_does_not_touch_the_active_one(service):
+    active = service.start_active_route(USER_ID, payload())
+
+    service.record_finished_route(USER_ID, finished(status="cancelled"))
+
+    assert active.status == "active"
+    assert service.get_active_route(USER_ID) is active
+
+
+def test_recording_the_same_route_twice_does_not_duplicate_it(service, repo):
+    data = finished()
+    first = service.record_finished_route(USER_ID, data)
+
+    again = service.record_finished_route(USER_ID, data)
+
+    assert again is first
+    assert len(repo.routes) == 1
+
+
+def test_recorded_id_of_another_user_is_a_conflict(service):
+    data = finished()
+    service.record_finished_route(uuid.uuid4(), data)
+
+    with pytest.raises(RouteIdConflictError):
+        service.record_finished_route(USER_ID, data)
+
+
+def test_recorded_times_in_the_future_are_clamped_to_now(service):
+    route = service.record_finished_route(
+        USER_ID, finished(started_at="2027-01-01T09:00:00Z", finished_at="2027-01-01T09:20:00Z")
+    )
+
+    assert route.started_at == NOW
+    assert route.finished_at == NOW

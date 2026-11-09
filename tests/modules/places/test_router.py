@@ -8,7 +8,12 @@ from app.main import app
 from app.modules.places.router import get_route_service
 from app.modules.places.service import RouteService
 from app.modules.users.dependencies import get_current_user_id
-from tests.factories import destination_change_payload, place, route_payload
+from tests.factories import (
+    destination_change_payload,
+    finished_route_payload,
+    place,
+    route_payload,
+)
 from tests.modules.places.fakes import FakeRouteRepository
 
 USER_ID = uuid.uuid4()
@@ -228,3 +233,83 @@ def test_history_contract_documents_errors(client):
 
     assert {"200", "401", "422", "503"} <= history["responses"].keys()
     assert {"HTTPBearer": []} in history["security"]
+
+
+# Finalizar Ruta
+
+
+def finish_url(route_id) -> str:
+    return f"/places/routes/{route_id}/finish"
+
+
+def test_finish_moves_the_active_route_to_the_history(client, repo):
+    created = client.put(URL, json=route_payload()).json()
+
+    response = client.post(
+        finish_url(created["id"]),
+        json={"status": "completed", "finished_at": "2020-01-01T00:00:00Z"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == created["id"]
+    assert body["status"] == "completed"
+    assert body["finished_at"]
+    assert client.get(URL).status_code == 404
+    assert [item["id"] for item in client.get(HISTORY_URL).json()["items"]] == [created["id"]]
+
+
+def test_finish_unknown_route_returns_404(client, repo):
+    response = client.post(
+        finish_url(uuid.uuid4()),
+        json={"status": "completed", "finished_at": "2026-11-08T10:00:00Z"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "route_not_found"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"status": "active", "finished_at": "2026-11-08T10:00:00Z"},
+        {"status": "completed", "finished_at": "2026-11-08T10:00:00"},  # sin zona horaria
+        {"status": "completed"},
+    ],
+)
+def test_finish_validates_the_body(client, repo, body):
+    created = client.put(URL, json=route_payload()).json()
+
+    assert client.post(finish_url(created["id"]), json=body).status_code == 422
+    assert client.get(URL).status_code == 200
+
+
+def test_offline_route_is_recorded_with_201(client, repo):
+    payload = finished_route_payload()
+
+    response = client.post(HISTORY_URL, json=payload)
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["id"] == payload["id"]
+    assert body["status"] == "completed"
+    assert client.get(HISTORY_URL).json()["total"] == 1
+
+
+def test_offline_route_rejects_a_finish_before_its_start(client, repo):
+    payload = finished_route_payload(
+        started_at="2026-11-08T10:00:00Z", finished_at="2026-11-08T09:00:00Z"
+    )
+
+    assert client.post(HISTORY_URL, json=payload).status_code == 422
+
+
+def test_finish_contracts_document_errors(client):
+    spec = client.get("/openapi.json").json()
+    finish = spec["paths"]["/places/routes/{route_id}/finish"]["post"]
+    record = spec["paths"][HISTORY_URL]["post"]
+
+    assert {"200", "401", "404", "422", "503"} <= finish["responses"].keys()
+    assert {"201", "401", "409", "422", "503"} <= record["responses"].keys()
+    assert {"HTTPBearer": []} in finish["security"]
+    assert {"HTTPBearer": []} in record["security"]

@@ -34,6 +34,10 @@ def route_payload(**overrides: Any) -> dict[str, Any]:
     return payload
 
 
+def place(name: str, latitude: float = 4.6110, longitude: float = -74.0790) -> dict[str, Any]:
+    return {"name": name, "latitude": latitude, "longitude": longitude}
+
+
 def destination_change_payload(**overrides: Any) -> dict[str, Any]:
     """Cuerpo válido de PUT /places/routes/{id}/destination: nueva ruta desde donde está."""
     payload: dict[str, Any] = {

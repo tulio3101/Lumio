@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -9,9 +9,10 @@ from app.modules.places.exceptions import (
     RouteNotFoundError,
     RouteNotOpenError,
 )
+from app.modules.places.models import Route
 from app.modules.places.schemas import RouteCreate, RouteDestinationChange
 from app.modules.places.service import RouteService
-from tests.factories import destination_change_payload, route_payload
+from tests.factories import destination_change_payload, place, route_payload
 from tests.modules.places.fakes import FakeRouteRepository
 
 NOW = datetime(2026, 11, 7, 15, 30, tzinfo=UTC)
@@ -172,3 +173,79 @@ def test_change_destination_of_another_users_route_is_not_found(service):
 def test_change_destination_of_unknown_route_is_not_found(service):
     with pytest.raises(RouteNotFoundError):
         service.change_destination(USER_ID, uuid.uuid4(), change())
+
+
+# Historial (Consultar Rutas Recientes)
+
+
+def closed_route(
+    name: str, finished_minute: int | None, status: str = "cancelled", user_id=USER_ID
+) -> Route:
+    data = route_payload(destination=place(name))
+    return Route(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        origin=data["origin"],
+        destination=data["destination"],
+        steps=data["steps"],
+        distance_meters=data["distance_meters"],
+        expected_travel_time_seconds=data["expected_travel_time_seconds"],
+        current_step=0,
+        status=status,
+        started_at=NOW,
+        finished_at=None if finished_minute is None else NOW + timedelta(minutes=finished_minute),
+    )
+
+
+def names(routes: list[Route]) -> list[str]:
+    return [route.destination["name"] for route in routes]
+
+
+def test_history_lists_closed_routes_newest_first(service, repo):
+    repo.routes += [
+        closed_route("Farmacia Central", 1),
+        closed_route("Biblioteca Nacional", 3, status="completed"),
+        closed_route("Parque de los Novios", 2),
+    ]
+
+    routes, total = service.list_history(USER_ID, limit=20, offset=0)
+
+    assert names(routes) == ["Biblioteca Nacional", "Parque de los Novios", "Farmacia Central"]
+    assert total == 3
+
+
+def test_history_keeps_the_route_cancelled_by_a_new_one(service):
+    first = service.start_active_route(USER_ID, payload(destination=place("Farmacia Central")))
+    service.start_active_route(USER_ID, payload(destination=place("Parque de los Novios")))
+
+    routes, total = service.list_history(USER_ID, limit=20, offset=0)
+
+    # La ruta activa no forma parte del historial.
+    assert routes == [first]
+    assert first.status == "cancelled"
+    assert total == 1
+
+
+def test_history_only_includes_the_users_routes(service, repo):
+    repo.routes += [
+        closed_route("Farmacia Central", 1),
+        closed_route("Otro", 2, user_id=uuid.uuid4()),
+    ]
+
+    routes, total = service.list_history(USER_ID, limit=20, offset=0)
+
+    assert names(routes) == ["Farmacia Central"]
+    assert total == 1
+
+
+def test_history_is_paginated_with_the_full_total(service, repo):
+    repo.routes += [closed_route(f"Lugar {minute}", minute) for minute in range(1, 6)]
+
+    routes, total = service.list_history(USER_ID, limit=2, offset=1)
+
+    assert names(routes) == ["Lugar 4", "Lugar 3"]
+    assert total == 5
+
+
+def test_empty_history(service):
+    assert service.list_history(USER_ID, limit=20, offset=0) == ([], 0)

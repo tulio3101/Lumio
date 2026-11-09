@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.exc import OperationalError
@@ -7,7 +8,7 @@ from app.main import app
 from app.modules.places.router import get_route_service
 from app.modules.places.service import RouteService
 from app.modules.users.dependencies import get_current_user_id
-from tests.factories import destination_change_payload, route_payload
+from tests.factories import destination_change_payload, place, route_payload
 from tests.modules.places.fakes import FakeRouteRepository
 
 USER_ID = uuid.uuid4()
@@ -142,3 +143,88 @@ def test_destination_change_contract_documents_errors(client):
 
     assert {"200", "401", "404", "409", "422", "503"} <= change["responses"].keys()
     assert {"HTTPBearer": []} in change["security"]
+
+
+# Historial (Consultar Rutas Recientes)
+
+HISTORY_URL = "/places/routes/history"
+
+
+@pytest.fixture
+def ticking(repo):
+    """Servicio con un reloj que avanza un minuto por llamada: fechas de fin distintas."""
+    start = datetime(2026, 11, 8, 10, 0, tzinfo=UTC)
+    calls = iter(range(1000))
+    app.dependency_overrides[get_route_service] = lambda: RouteService(
+        repo, now=lambda: start + timedelta(minutes=next(calls))
+    )
+    return repo
+
+
+def start_route(client, name: str) -> dict:
+    response = client.put(URL, json=route_payload(destination=place(name)))
+    assert response.status_code == 200
+    return response.json()
+
+
+def test_history_lists_replaced_routes_newest_first(client, ticking):
+    pharmacy = start_route(client, "Farmacia Central")
+    park = start_route(client, "Parque de los Novios")
+    start_route(client, "Biblioteca Nacional")  # sigue activa
+
+    response = client.get(HISTORY_URL)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["id"] for item in body["items"]] == [park["id"], pharmacy["id"]]
+    assert [item["destination"]["name"] for item in body["items"]] == [
+        "Parque de los Novios",
+        "Farmacia Central",
+    ]
+    assert {item["status"] for item in body["items"]} == {"cancelled"}
+    assert all(item["finished_at"] for item in body["items"])
+    assert "steps" not in body["items"][0]
+    assert (body["total"], body["limit"], body["offset"]) == (2, 20, 0)
+
+
+def test_empty_history_returns_an_empty_page(client, repo):
+    response = client.get(HISTORY_URL)
+
+    assert response.status_code == 200
+    assert response.json() == {"items": [], "total": 0, "limit": 20, "offset": 0}
+
+
+def test_history_pagination_is_applied(client, ticking):
+    pharmacy = start_route(client, "Farmacia Central")
+    start_route(client, "Parque de los Novios")
+    start_route(client, "Biblioteca Nacional")
+
+    body = client.get(HISTORY_URL, params={"limit": 1, "offset": 1}).json()
+
+    assert [item["id"] for item in body["items"]] == [pharmacy["id"]]
+    assert (body["total"], body["limit"], body["offset"]) == (2, 1, 1)
+
+
+@pytest.mark.parametrize("params", [{"limit": 0}, {"limit": 101}, {"offset": -1}])
+def test_history_rejects_invalid_pagination(client, repo, params):
+    assert client.get(HISTORY_URL, params=params).status_code == 422
+
+
+def test_history_database_unavailable_returns_503(client, repo):
+    def broken_service():
+        raise OperationalError("SELECT 1", {}, Exception("connection refused"))
+
+    app.dependency_overrides[get_route_service] = broken_service
+
+    response = client.get(HISTORY_URL)
+
+    assert response.status_code == 503
+    assert response.json()["code"] == "database_unavailable"
+
+
+def test_history_contract_documents_errors(client):
+    spec = client.get("/openapi.json").json()
+    history = spec["paths"][HISTORY_URL]["get"]
+
+    assert {"200", "401", "422", "503"} <= history["responses"].keys()
+    assert {"HTTPBearer": []} in history["security"]

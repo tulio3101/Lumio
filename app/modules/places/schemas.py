@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 MAX_ROUTE_STEPS = 500
 
@@ -11,6 +11,13 @@ MAX_ROUTE_STEPS = 500
 class RouteStatus(StrEnum):
     ACTIVE = "active"
     PAUSED = "paused"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class RouteOutcome(StrEnum):
+    """Cómo terminó una ruta: se llegó al destino o se terminó sin llegar."""
+
     COMPLETED = "completed"
     CANCELLED = "cancelled"
 
@@ -66,6 +73,38 @@ class RouteDestinationChange(RouteCreate):
     Sustituye origen, destino, pasos, distancia y duración de la misma ruta; el progreso
     vuelve al primer paso.
     """
+
+
+class RouteFinish(BaseModel):
+    """Finalizar una ruta abierta (Finalizar Ruta)."""
+
+    status: RouteOutcome
+    finished_at: AwareDatetime = Field(
+        description=(
+            "Cuándo terminó en el dispositivo. Puede ser anterior a la petición si se "
+            "sincroniza después de estar sin conexión."
+        )
+    )
+
+
+class FinishedRouteCreate(RouteCreate):
+    """Ruta finalizada en el dispositivo que nunca llegó al backend (se usó sin conexión).
+
+    Se guarda directamente en el historial: no toca la ruta abierta del usuario.
+    """
+
+    id: uuid.UUID = Field(
+        description="Id generado en el dispositivo; reenviar la misma ruta no la duplica."
+    )
+    status: RouteOutcome
+    started_at: AwareDatetime
+    finished_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def _finished_after_start(self) -> Self:
+        if self.finished_at < self.started_at:
+            raise ValueError("finished_at no puede ser anterior a started_at")
+        return self
 
 
 class ActiveRouteUpdate(BaseModel):

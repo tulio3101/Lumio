@@ -7,12 +7,19 @@ from sqlalchemy.exc import IntegrityError
 from app.modules.places.exceptions import (
     ActiveRouteConflictError,
     ActiveRouteNotFoundError,
+    RouteIdConflictError,
     RouteNotFoundError,
     RouteNotOpenError,
 )
 from app.modules.places.models import OPEN_ROUTE_STATUSES, Route
 from app.modules.places.repository import RouteRepository
-from app.modules.places.schemas import RouteCreate, RouteDestinationChange, RouteStatus
+from app.modules.places.schemas import (
+    FinishedRouteCreate,
+    RouteCreate,
+    RouteDestinationChange,
+    RouteFinish,
+    RouteStatus,
+)
 
 
 class RouteService:
@@ -78,6 +85,66 @@ class RouteService:
         route.current_step = 0
         route.status = RouteStatus.ACTIVE.value
         self.routes.commit()
+        return route
+
+    def finish_route(self, user_id: uuid.UUID, route_id: uuid.UUID, payload: RouteFinish) -> Route:
+        """Finaliza una ruta abierta (Finalizar Ruta): queda en el historial con su estado.
+
+        La hora de fin es la del dispositivo, acotada entre el inicio de la ruta y ahora.
+        Es idempotente: si la ruta ya está cerrada (un reintento tras perder la respuesta,
+        o se canceló al iniciar otra) se devuelve sin cambios.
+        """
+        route = self.routes.get_for_user(route_id, user_id)
+        if route is None:
+            raise RouteNotFoundError()
+        if route.status in OPEN_ROUTE_STATUSES:
+            route.status = payload.status.value
+            route.finished_at = max(route.started_at, min(payload.finished_at, self.now()))
+            self.routes.commit()
+        return route
+
+    def record_finished_route(self, user_id: uuid.UUID, payload: FinishedRouteCreate) -> Route:
+        """Guarda en el historial una ruta finalizada sin conexión que nunca llegó al backend.
+
+        No toca la ruta abierta del usuario. Reenviar el mismo id devuelve la ruta ya
+        guardada; un id que pertenece a otro usuario es un conflicto.
+        """
+        existing = self.routes.get(payload.id)
+        if existing is not None:
+            return self._same_user_or_conflict(existing, user_id)
+
+        now = self.now()
+        started_at = min(payload.started_at, now)
+        route = self.routes.add(
+            Route(
+                id=payload.id,
+                user_id=user_id,
+                origin=payload.origin.model_dump(),
+                destination=payload.destination.model_dump(),
+                steps=[step.model_dump() for step in payload.steps],
+                distance_meters=payload.distance_meters,
+                expected_travel_time_seconds=payload.expected_travel_time_seconds,
+                current_step=0,
+                status=payload.status.value,
+                started_at=started_at,
+                finished_at=max(started_at, min(payload.finished_at, now)),
+            )
+        )
+        try:
+            self.routes.commit()
+        except IntegrityError as exc:
+            # El mismo envío llegó dos veces a la vez: gana el primero.
+            self.routes.rollback()
+            existing = self.routes.get(payload.id)
+            if existing is None:
+                raise RouteIdConflictError() from exc
+            return self._same_user_or_conflict(existing, user_id)
+        return route
+
+    @staticmethod
+    def _same_user_or_conflict(route: Route, user_id: uuid.UUID) -> Route:
+        if route.user_id != user_id:
+            raise RouteIdConflictError()
         return route
 
     def list_history(self, user_id: uuid.UUID, limit: int, offset: int) -> tuple[list[Route], int]:

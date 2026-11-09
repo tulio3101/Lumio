@@ -18,12 +18,14 @@ from sqlalchemy.orm import Session, sessionmaker
 from alembic import command
 from app.core.config import get_settings
 from app.core.db import get_db
+from app.core.security import hash_password
 from app.main import app
+from app.modules.users import repository as users
 from app.modules.users.models import User
-from app.scripts.seed_dev_user import seed_dev_user
 
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
 ROOT = Path(__file__).resolve().parents[2]
+PASSWORD = "clave-segura-1"
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
@@ -75,7 +77,23 @@ def api(session_factory: sessionmaker[Session]) -> Iterator[TestClient]:
     app.dependency_overrides.clear()
 
 
-@pytest.fixture
-def dev_user(session_factory: sessionmaker[Session]) -> User:
+def create_user(session_factory: sessionmaker[Session], email: str) -> User:
     with session_factory() as session:
-        return seed_dev_user(session)
+        return users.create_user(session, email, hash_password(PASSWORD))
+
+
+def login(api: TestClient, email: str) -> dict[str, str]:
+    """Inicia sesión por la API y devuelve la cabecera Authorization."""
+    response = api.post("/users/login", json={"email": email, "password": PASSWORD})
+    assert response.status_code == 200, response.text
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+@pytest.fixture
+def user(session_factory: sessionmaker[Session]) -> User:
+    return create_user(session_factory, "ana@example.com")
+
+
+@pytest.fixture
+def auth(api: TestClient, user: User) -> dict[str, str]:
+    return login(api, user.email)

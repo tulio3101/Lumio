@@ -1,3 +1,4 @@
+import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -10,6 +11,7 @@ from app.modules.places.schemas import (
     ActiveRoute,
     ActiveRouteUpdate,
     RouteCreate,
+    RouteDestinationChange,
     RouteHistoryPage,
 )
 from app.modules.places.service import RouteService
@@ -24,7 +26,7 @@ NOT_IMPLEMENTED = HTTPException(
 _UNAUTHORIZED: dict[int | str, dict[str, Any]] = {
     status.HTTP_401_UNAUTHORIZED: {
         "model": ErrorResponse,
-        "description": "Usuario no identificado.",
+        "description": "Falta el access token o la sesión no es válida.",
     },
     status.HTTP_503_SERVICE_UNAVAILABLE: {
         "model": ErrorResponse,
@@ -73,6 +75,36 @@ def start_active_route(
 )
 def get_active_route(user_id: CurrentUserId, service: RouteServiceDep) -> ActiveRoute:
     return ActiveRoute.model_validate(service.get_active_route(user_id))
+
+
+@router.put(
+    "/routes/{route_id}/destination",
+    response_model=ActiveRoute,
+    summary="Cambiar el destino de una ruta abierta",
+    description=(
+        "Sustituye el recorrido de la ruta (origen, destino, pasos, distancia y duración) "
+        "por uno nuevo calculado en el dispositivo desde la ubicación actual. La ruta "
+        "conserva su id, vuelve al primer paso y queda activa."
+    ),
+    responses={
+        **_UNAUTHORIZED,
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorResponse,
+            "description": "La ruta no existe o es de otro usuario.",
+        },
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorResponse,
+            "description": "La ruta ya terminó o se canceló.",
+        },
+    },
+)
+def change_route_destination(
+    route_id: uuid.UUID,
+    payload: RouteDestinationChange,
+    user_id: CurrentUserId,
+    service: RouteServiceDep,
+) -> ActiveRoute:
+    return ActiveRoute.model_validate(service.change_destination(user_id, route_id, payload))
 
 
 @router.patch(

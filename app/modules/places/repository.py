@@ -16,6 +16,12 @@ class RouteRepository:
             select(Route).where(Route.user_id == user_id, Route.status.in_(OPEN_ROUTE_STATUSES))
         )
 
+    def get_for_user(self, route_id: uuid.UUID, user_id: uuid.UUID) -> Route | None:
+        """Ruta del usuario por id; None si no existe o pertenece a otro usuario."""
+        return self.session.scalar(
+            select(Route).where(Route.id == route_id, Route.user_id == user_id)
+        )
+
     def add(self, route: Route) -> Route:
         self.session.add(route)
         return route

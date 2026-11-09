@@ -24,6 +24,8 @@ class AppError(Exception):
     status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR
     code: str = "internal_error"
     message: str = "Error interno del servidor."
+    #: Cabeceras HTTP adicionales, p. ej. ``WWW-Authenticate`` en un 401.
+    headers: dict[str, str] | None = None
 
     def __init__(self, message: str | None = None) -> None:
         self.message = message or self.message
@@ -38,7 +40,9 @@ class ServiceUnavailableError(AppError):
 
 def _error_response(error: AppError) -> JSONResponse:
     body = ErrorResponse(detail=error.message, code=error.code)
-    return JSONResponse(status_code=error.status_code, content=body.model_dump())
+    return JSONResponse(
+        status_code=error.status_code, content=body.model_dump(), headers=error.headers
+    )
 
 
 def register_exception_handlers(app: FastAPI) -> None:

@@ -88,6 +88,10 @@ class ActiveRoute(BaseModel):
 
 
 class RouteHistoryItem(BaseModel):
+    """Ruta que ya no está abierta: completada o cancelada (por ejemplo, al iniciar otra)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     origin: Place
     destination: Place

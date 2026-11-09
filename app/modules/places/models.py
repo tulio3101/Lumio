@@ -19,7 +19,9 @@ from app.core.db import Base
 
 # Una ruta "abierta" es la ruta activa del usuario (en curso o pausada).
 OPEN_ROUTE_STATUSES = ("active", "paused")
-ROUTE_STATUSES = (*OPEN_ROUTE_STATUSES, "completed", "cancelled")
+# Rutas que ya no están abiertas: forman el historial del usuario.
+CLOSED_ROUTE_STATUSES = ("completed", "cancelled")
+ROUTE_STATUSES = (*OPEN_ROUTE_STATUSES, *CLOSED_ROUTE_STATUSES)
 _OPEN_ROUTE_SQL = text("status IN ('active', 'paused')")
 
 

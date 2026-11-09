@@ -1,9 +1,9 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.modules.places.models import OPEN_ROUTE_STATUSES, Route
+from app.modules.places.models import CLOSED_ROUTE_STATUSES, OPEN_ROUTE_STATUSES, Route
 
 
 class RouteRepository:
@@ -20,6 +20,28 @@ class RouteRepository:
         """Ruta del usuario por id; None si no existe o pertenece a otro usuario."""
         return self.session.scalar(
             select(Route).where(Route.id == route_id, Route.user_id == user_id)
+        )
+
+    def list_closed_for_user(self, user_id: uuid.UUID, limit: int, offset: int) -> list[Route]:
+        """Rutas completadas o canceladas, de la que terminó más recientemente a la más antigua."""
+        return list(
+            self.session.scalars(
+                select(Route)
+                .where(Route.user_id == user_id, Route.status.in_(CLOSED_ROUTE_STATUSES))
+                .order_by(Route.finished_at.desc().nulls_last(), Route.started_at.desc(), Route.id)
+                .limit(limit)
+                .offset(offset)
+            )
+        )
+
+    def count_closed_for_user(self, user_id: uuid.UUID) -> int:
+        return (
+            self.session.scalar(
+                select(func.count())
+                .select_from(Route)
+                .where(Route.user_id == user_id, Route.status.in_(CLOSED_ROUTE_STATUSES))
+            )
+            or 0
         )
 
     def add(self, route: Route) -> Route:

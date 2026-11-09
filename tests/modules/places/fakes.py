@@ -21,6 +21,9 @@ class FakeRouteRepository:
             None,
         )
 
+    def get(self, route_id: uuid.UUID) -> Route | None:
+        return next((r for r in self.routes if r.id == route_id), None)
+
     def get_for_user(self, route_id: uuid.UUID, user_id: uuid.UUID) -> Route | None:
         return next((r for r in self.routes if r.id == route_id and r.user_id == user_id), None)
 

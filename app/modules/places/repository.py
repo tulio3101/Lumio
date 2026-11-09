@@ -16,6 +16,10 @@ class RouteRepository:
             select(Route).where(Route.user_id == user_id, Route.status.in_(OPEN_ROUTE_STATUSES))
         )
 
+    def get(self, route_id: uuid.UUID) -> Route | None:
+        """Ruta por id, de cualquier usuario: solo para detectar ids repetidos."""
+        return self.session.get(Route, route_id)
+
     def get_for_user(self, route_id: uuid.UUID, user_id: uuid.UUID) -> Route | None:
         """Ruta del usuario por id; None si no existe o pertenece a otro usuario."""
         return self.session.scalar(

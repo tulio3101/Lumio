@@ -21,6 +21,12 @@ class RouteNotOpenError(AppError):
     message = "La ruta ya terminó o se canceló; no se puede cambiar su destino."
 
 
+class RouteIdConflictError(AppError):
+    status_code = status.HTTP_409_CONFLICT
+    code = "route_id_conflict"
+    message = "Ya existe una ruta con ese id."
+
+
 class ActiveRouteConflictError(AppError):
     status_code = status.HTTP_409_CONFLICT
     code = "active_route_conflict"

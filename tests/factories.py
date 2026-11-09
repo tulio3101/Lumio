@@ -1,3 +1,4 @@
+import uuid
 from typing import Any
 
 
@@ -30,6 +31,18 @@ def route_payload(**overrides: Any) -> dict[str, Any]:
         "distance_meters": 320.0,
         "expected_travel_time_seconds": 260.0,
     }
+    payload.update(overrides)
+    return payload
+
+
+def finished_route_payload(**overrides: Any) -> dict[str, Any]:
+    """Cuerpo válido de POST /places/routes/history: ruta finalizada sin conexión."""
+    payload = route_payload(
+        id=str(uuid.uuid4()),
+        status="completed",
+        started_at="2026-11-08T09:00:00Z",
+        finished_at="2026-11-08T09:20:00Z",
+    )
     payload.update(overrides)
     return payload
 

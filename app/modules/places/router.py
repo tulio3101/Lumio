@@ -10,8 +10,10 @@ from app.modules.places.repository import RouteRepository
 from app.modules.places.schemas import (
     ActiveRoute,
     ActiveRouteUpdate,
+    FinishedRouteCreate,
     RouteCreate,
     RouteDestinationChange,
+    RouteFinish,
     RouteHistoryItem,
     RouteHistoryPage,
 )
@@ -106,6 +108,57 @@ def change_route_destination(
     service: RouteServiceDep,
 ) -> ActiveRoute:
     return ActiveRoute.model_validate(service.change_destination(user_id, route_id, payload))
+
+
+@router.post(
+    "/routes/{route_id}/finish",
+    response_model=RouteHistoryItem,
+    summary="Finalizar una ruta",
+    description=(
+        "Cierra una ruta abierta como `completed` (se llegó al destino) o `cancelled` "
+        "(se terminó sin llegar) con la hora de fin del dispositivo, y queda en el "
+        "historial. Si la ruta ya estaba cerrada se devuelve sin cambios, así que "
+        "reintentar es seguro."
+    ),
+    responses={
+        **_UNAUTHORIZED,
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorResponse,
+            "description": "La ruta no existe o es de otro usuario.",
+        },
+    },
+)
+def finish_route(
+    route_id: uuid.UUID,
+    payload: RouteFinish,
+    user_id: CurrentUserId,
+    service: RouteServiceDep,
+) -> RouteHistoryItem:
+    return RouteHistoryItem.model_validate(service.finish_route(user_id, route_id, payload))
+
+
+@router.post(
+    "/routes/history",
+    response_model=RouteHistoryItem,
+    status_code=status.HTTP_201_CREATED,
+    summary="Guardar una ruta ya finalizada",
+    description=(
+        "Guarda en el historial una ruta finalizada en el dispositivo que nunca llegó al "
+        "backend (se usó sin conexión). No toca la ruta activa. Reenviar el mismo `id` "
+        "devuelve la ruta ya guardada sin duplicarla."
+    ),
+    responses={
+        **_UNAUTHORIZED,
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorResponse,
+            "description": "El id ya pertenece a una ruta de otro usuario.",
+        },
+    },
+)
+def record_finished_route(
+    payload: FinishedRouteCreate, user_id: CurrentUserId, service: RouteServiceDep
+) -> RouteHistoryItem:
+    return RouteHistoryItem.model_validate(service.record_finished_route(user_id, payload))
 
 
 @router.patch(

@@ -75,3 +75,38 @@ def destination_change_payload(**overrides: Any) -> dict[str, Any]:
     }
     payload.update(overrides)
     return payload
+
+
+def reroute_payload(**overrides: Any) -> dict[str, Any]:
+    """Cuerpo válido de PUT /places/routes/{id}/reroute: mismo destino que route_payload,
+    recorrido recalculado desde donde se desvió el usuario."""
+    payload: dict[str, Any] = {
+        "origin": {"name": "Ubicación actual", "latitude": 4.6085, "longitude": -74.0830},
+        "destination": {"name": "Farmacia Central", "latitude": 4.6110, "longitude": -74.0790},
+        "steps": [
+            {
+                "order": 0,
+                "instruction": "Camina hacia el este por la Calle 17",
+                "distance_meters": 150.0,
+                "latitude": 4.6085,
+                "longitude": -74.0830,
+            },
+            {
+                "order": 1,
+                "instruction": "Gira a la izquierda en la Carrera 5",
+                "distance_meters": 260.0,
+                "latitude": 4.6087,
+                "longitude": -74.0816,
+            },
+            {
+                "order": 2,
+                "instruction": "El destino está a tu derecha",
+                "distance_meters": 0.0,
+            },
+        ],
+        "distance_meters": 410.0,
+        "expected_travel_time_seconds": 330.0,
+        "rerouted_at": "2026-11-07T15:30:00Z",
+    }
+    payload.update(overrides)
+    return payload

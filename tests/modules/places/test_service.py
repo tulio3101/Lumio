@@ -6,6 +6,7 @@ import pytest
 from app.modules.places.exceptions import (
     ActiveRouteConflictError,
     ActiveRouteNotFoundError,
+    RouteDestinationMismatchError,
     RouteIdConflictError,
     RouteNotFoundError,
     RouteNotOpenError,
@@ -16,12 +17,14 @@ from app.modules.places.schemas import (
     RouteCreate,
     RouteDestinationChange,
     RouteFinish,
+    RouteReroute,
 )
 from app.modules.places.service import RouteService
 from tests.factories import (
     destination_change_payload,
     finished_route_payload,
     place,
+    reroute_payload,
     route_payload,
 )
 from tests.modules.places.fakes import FakeRouteRepository
@@ -184,6 +187,139 @@ def test_change_destination_of_another_users_route_is_not_found(service):
 def test_change_destination_of_unknown_route_is_not_found(service):
     with pytest.raises(RouteNotFoundError):
         service.change_destination(USER_ID, uuid.uuid4(), change())
+
+
+# Recalcular Ruta
+
+
+def reroute(**overrides) -> RouteReroute:
+    return RouteReroute.model_validate(reroute_payload(**overrides))
+
+
+@pytest.fixture
+def after_reroute(repo) -> RouteService:
+    """Servicio diez minutos después de NOW: el recálculo del dispositivo ya ocurrió."""
+    return RouteService(repo, now=lambda: NOW + timedelta(minutes=10))
+
+
+def rerouted_at(minutes_after_start: int) -> str:
+    return (NOW + timedelta(minutes=minutes_after_start)).isoformat()
+
+
+def test_reroute_replaces_the_path_of_the_same_route(service, after_reroute, repo):
+    route = service.start_active_route(USER_ID, payload())
+    route.current_step = 1
+    commits_before = repo.commits
+
+    rerouted = after_reroute.reroute(USER_ID, route.id, reroute(rerouted_at=rerouted_at(5)))
+
+    assert rerouted is route
+    assert repo.routes == [route]
+    assert repo.commits == commits_before + 1
+    assert route.destination["name"] == "Farmacia Central"
+    assert route.origin["latitude"] == 4.6085
+    assert [step["instruction"] for step in route.steps] == [
+        "Camina hacia el este por la Calle 17",
+        "Gira a la izquierda en la Carrera 5",
+        "El destino está a tu derecha",
+    ]
+    assert route.distance_meters == 410.0
+    assert route.expected_travel_time_seconds == 330.0
+    assert route.current_step == 0
+    assert route.status == "active"
+    assert route.started_at == NOW
+    assert route.reroute_count == 1
+    assert route.last_rerouted_at == NOW + timedelta(minutes=5)
+
+
+def test_each_reroute_is_counted(service, after_reroute):
+    route = service.start_active_route(USER_ID, payload())
+
+    after_reroute.reroute(USER_ID, route.id, reroute(rerouted_at=rerouted_at(2)))
+    after_reroute.reroute(USER_ID, route.id, reroute(rerouted_at=rerouted_at(6)))
+
+    assert route.reroute_count == 2
+    assert route.last_rerouted_at == NOW + timedelta(minutes=6)
+
+
+def test_new_routes_start_without_reroutes(service):
+    route = service.start_active_route(USER_ID, payload())
+
+    assert route.reroute_count == 0
+    assert route.last_rerouted_at is None
+
+
+def test_reroute_resumes_a_paused_route(service, after_reroute):
+    route = service.start_active_route(USER_ID, payload())
+    route.status = "paused"
+
+    after_reroute.reroute(USER_ID, route.id, reroute())
+
+    assert route.status == "active"
+
+
+@pytest.mark.parametrize("minutes_after_start, expected", [(60, 10), (-10, 0)])
+def test_reroute_time_is_kept_between_start_and_now(
+    service, after_reroute, minutes_after_start, expected
+):
+    route = service.start_active_route(USER_ID, payload())
+
+    after_reroute.reroute(USER_ID, route.id, reroute(rerouted_at=rerouted_at(minutes_after_start)))
+
+    assert route.last_rerouted_at == NOW + timedelta(minutes=expected)
+
+
+def test_reroute_tolerates_rounding_of_the_destination(service, after_reroute):
+    route = service.start_active_route(USER_ID, payload())
+    destination = place("Farmacia Central", latitude=4.61100000001, longitude=-74.0790)
+
+    after_reroute.reroute(USER_ID, route.id, reroute(destination=destination))
+
+    assert route.reroute_count == 1
+
+
+@pytest.mark.parametrize(
+    "destination",
+    [
+        place("Parque de los Novios", latitude=4.6580, longitude=-74.0670),
+        place("Farmacia Central", latitude=4.6120, longitude=-74.0790),
+        place("Otra farmacia"),
+    ],
+)
+def test_reroute_to_another_destination_is_rejected(service, repo, destination):
+    route = service.start_active_route(USER_ID, payload())
+    commits_before = repo.commits
+
+    with pytest.raises(RouteDestinationMismatchError):
+        service.reroute(USER_ID, route.id, reroute(destination=destination))
+    assert route.steps[0]["instruction"] == "Camina hacia el norte por la Carrera 7"
+    assert route.reroute_count == 0
+    assert repo.commits == commits_before
+
+
+@pytest.mark.parametrize("status", ["completed", "cancelled"])
+def test_reroute_of_a_finished_route_is_rejected(service, repo, status):
+    route = service.start_active_route(USER_ID, payload())
+    route.status = status
+    commits_before = repo.commits
+
+    with pytest.raises(RouteNotOpenError):
+        service.reroute(USER_ID, route.id, reroute())
+    assert route.reroute_count == 0
+    assert repo.commits == commits_before
+
+
+def test_reroute_of_another_users_route_is_not_found(service):
+    route = service.start_active_route(uuid.uuid4(), payload())
+
+    with pytest.raises(RouteNotFoundError):
+        service.reroute(USER_ID, route.id, reroute())
+    assert route.reroute_count == 0
+
+
+def test_reroute_of_unknown_route_is_not_found(service):
+    with pytest.raises(RouteNotFoundError):
+        service.reroute(USER_ID, uuid.uuid4(), reroute())
 
 
 # Historial (Consultar Rutas Recientes)

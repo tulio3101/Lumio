@@ -16,6 +16,7 @@ from app.modules.places.schemas import (
     RouteFinish,
     RouteHistoryItem,
     RouteHistoryPage,
+    RouteReroute,
 )
 from app.modules.places.service import RouteService
 from app.modules.users.dependencies import CurrentUserId
@@ -108,6 +109,40 @@ def change_route_destination(
     service: RouteServiceDep,
 ) -> ActiveRoute:
     return ActiveRoute.model_validate(service.change_destination(user_id, route_id, payload))
+
+
+@router.put(
+    "/routes/{route_id}/reroute",
+    response_model=ActiveRoute,
+    summary="Recalcular el recorrido de una ruta abierta",
+    description=(
+        "Sustituye el recorrido (origen, pasos, distancia y duración) por uno recalculado en "
+        "el dispositivo desde la ubicación actual, cuando el usuario se desvió. El destino "
+        "debe ser el mismo de la ruta. La ruta conserva su id, vuelve al primer paso, queda "
+        "activa y suma un recálculo (`reroute_count`, `last_rerouted_at`)."
+    ),
+    responses={
+        **_UNAUTHORIZED,
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorResponse,
+            "description": "La ruta no existe o es de otro usuario.",
+        },
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorResponse,
+            "description": (
+                "La ruta ya terminó o se canceló (`route_not_open`), o el destino no es el "
+                "de la ruta (`route_destination_mismatch`)."
+            ),
+        },
+    },
+)
+def reroute_route(
+    route_id: uuid.UUID,
+    payload: RouteReroute,
+    user_id: CurrentUserId,
+    service: RouteServiceDep,
+) -> ActiveRoute:
+    return ActiveRoute.model_validate(service.reroute(user_id, route_id, payload))
 
 
 @router.post(

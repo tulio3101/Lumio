@@ -12,6 +12,7 @@ from tests.factories import (
     destination_change_payload,
     finished_route_payload,
     place,
+    reroute_payload,
     route_payload,
 )
 from tests.modules.places.fakes import FakeRouteRepository
@@ -148,6 +149,97 @@ def test_destination_change_contract_documents_errors(client):
 
     assert {"200", "401", "404", "409", "422", "503"} <= change["responses"].keys()
     assert {"HTTPBearer": []} in change["security"]
+
+
+# Recalcular Ruta
+
+
+def reroute_url(route_id) -> str:
+    return f"/places/routes/{route_id}/reroute"
+
+
+def test_reroute_keeps_route_id_and_destination_and_counts_it(client, repo):
+    created = client.put(URL, json=route_payload()).json()
+    assert created["reroute_count"] == 0
+    assert created["last_rerouted_at"] is None
+
+    response = client.put(reroute_url(created["id"]), json=reroute_payload())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == created["id"]
+    assert body["destination"] == created["destination"]
+    assert body["steps"][0]["instruction"] == "Camina hacia el este por la Calle 17"
+    assert body["distance_meters"] == 410.0
+    assert body["current_step"] == 0
+    assert body["status"] == "active"
+    assert body["reroute_count"] == 1
+    assert body["last_rerouted_at"] is not None
+    assert client.get(URL).json() == body
+
+
+def test_reroute_to_another_destination_returns_409_with_code(client, repo):
+    created = client.put(URL, json=route_payload()).json()
+
+    response = client.put(
+        reroute_url(created["id"]), json=reroute_payload(destination=place("Parque"))
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "route_destination_mismatch"
+    assert client.get(URL).json()["reroute_count"] == 0
+
+
+def test_reroute_of_cancelled_route_returns_409(client, repo):
+    first = client.put(URL, json=route_payload()).json()
+    client.put(URL, json=route_payload())  # cancela la primera
+
+    response = client.put(reroute_url(first["id"]), json=reroute_payload())
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "route_not_open"
+
+
+def test_reroute_of_unknown_route_returns_404_with_code(client, repo):
+    response = client.put(reroute_url(uuid.uuid4()), json=reroute_payload())
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "route_not_found"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"steps": []},
+        {"rerouted_at": "2026-11-07T15:30:00"},  # sin zona horaria
+        {"distance_meters": 0},
+    ],
+)
+def test_reroute_validates_payload(client, repo, overrides):
+    created = client.put(URL, json=route_payload()).json()
+    body = reroute_payload(**overrides)
+
+    response = client.put(reroute_url(created["id"]), json=body)
+
+    assert response.status_code == 422
+    assert client.get(URL).json()["steps"] == created["steps"]
+
+
+def test_reroute_requires_rerouted_at(client, repo):
+    created = client.put(URL, json=route_payload()).json()
+    body = reroute_payload()
+    del body["rerouted_at"]
+
+    assert client.put(reroute_url(created["id"]), json=body).status_code == 422
+
+
+def test_reroute_contract_documents_errors(client):
+    spec = client.get("/openapi.json").json()
+    reroute = spec["paths"]["/places/routes/{route_id}/reroute"]["put"]
+
+    assert {"200", "401", "404", "409", "422", "503"} <= reroute["responses"].keys()
+    assert {"HTTPBearer": []} in reroute["security"]
+    assert "RouteReroute" in spec["components"]["schemas"]
 
 
 # Historial (Consultar Rutas Recientes)

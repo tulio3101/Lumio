@@ -1,3 +1,4 @@
+import math
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -7,19 +8,35 @@ from sqlalchemy.exc import IntegrityError
 from app.modules.places.exceptions import (
     ActiveRouteConflictError,
     ActiveRouteNotFoundError,
+    RouteDestinationMismatchError,
     RouteIdConflictError,
     RouteNotFoundError,
     RouteNotOpenError,
+    RouteNotOpenForRerouteError,
 )
 from app.modules.places.models import OPEN_ROUTE_STATUSES, Route
 from app.modules.places.repository import RouteRepository
 from app.modules.places.schemas import (
     FinishedRouteCreate,
+    Place,
     RouteCreate,
     RouteDestinationChange,
     RouteFinish,
+    RouteReroute,
     RouteStatus,
 )
+
+# Diferencia de coordenadas que se considera el mismo punto (~1 cm): absorbe el redondeo
+# de los números al ir y volver del cliente.
+_SAME_COORDINATE_DEGREES = 1e-7
+
+
+def _same_place(stored: dict, place: Place) -> bool:
+    return (
+        stored.get("name") == place.name
+        and math.isclose(stored.get("latitude"), place.latitude, abs_tol=_SAME_COORDINATE_DEGREES)
+        and math.isclose(stored.get("longitude"), place.longitude, abs_tol=_SAME_COORDINATE_DEGREES)
+    )
 
 
 class RouteService:
@@ -51,6 +68,7 @@ class RouteService:
                 distance_meters=payload.distance_meters,
                 expected_travel_time_seconds=payload.expected_travel_time_seconds,
                 current_step=0,
+                reroute_count=0,
                 status=RouteStatus.ACTIVE.value,
                 started_at=timestamp,
             )
@@ -84,6 +102,33 @@ class RouteService:
         route.expected_travel_time_seconds = payload.expected_travel_time_seconds
         route.current_step = 0
         route.status = RouteStatus.ACTIVE.value
+        self.routes.commit()
+        return route
+
+    def reroute(self, user_id: uuid.UUID, route_id: uuid.UUID, payload: RouteReroute) -> Route:
+        """Sustituye el recorrido tras una desviación (Recalcular Ruta) hacia el mismo destino.
+
+        La ruta conserva su id, su destino y su inicio; el progreso vuelve al primer paso,
+        queda activa y se cuenta el recálculo. La hora es la del dispositivo, acotada entre
+        el inicio de la ruta y ahora. Un destino distinto es un cambio de destino, no un
+        recálculo.
+        """
+        route = self.routes.get_for_user(route_id, user_id)
+        if route is None:
+            raise RouteNotFoundError()
+        if route.status not in OPEN_ROUTE_STATUSES:
+            raise RouteNotOpenForRerouteError()
+        if not _same_place(route.destination, payload.destination):
+            raise RouteDestinationMismatchError()
+
+        route.origin = payload.origin.model_dump()
+        route.steps = [step.model_dump() for step in payload.steps]
+        route.distance_meters = payload.distance_meters
+        route.expected_travel_time_seconds = payload.expected_travel_time_seconds
+        route.current_step = 0
+        route.status = RouteStatus.ACTIVE.value
+        route.reroute_count += 1
+        route.last_rerouted_at = max(route.started_at, min(payload.rerouted_at, self.now()))
         self.routes.commit()
         return route
 
@@ -125,6 +170,7 @@ class RouteService:
                 distance_meters=payload.distance_meters,
                 expected_travel_time_seconds=payload.expected_travel_time_seconds,
                 current_step=0,
+                reroute_count=0,
                 status=payload.status.value,
                 started_at=started_at,
                 finished_at=max(started_at, min(payload.finished_at, now)),

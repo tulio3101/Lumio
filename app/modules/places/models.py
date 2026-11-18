@@ -32,6 +32,7 @@ class Route(Base):
             "status IN ('active', 'paused', 'completed', 'cancelled')", name="ck_routes_status"
         ),
         CheckConstraint("current_step >= 0", name="ck_routes_current_step"),
+        CheckConstraint("reroute_count >= 0", name="ck_routes_reroute_count"),
         # Solo una ruta activa por usuario, garantizado también ante peticiones concurrentes.
         Index(
             "uq_routes_one_open_per_user",
@@ -56,6 +57,9 @@ class Route(Base):
         Float, default=0, server_default="0"
     )
     current_step: Mapped[int] = mapped_column(Integer, default=0)
+    # Veces que se recalculó el recorrido al desviarse (Recalcular Ruta) y la última.
+    reroute_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    last_rerouted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(16), index=True, default="active")
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

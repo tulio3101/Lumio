@@ -36,9 +36,12 @@ probar, crea una cuenta desde la app iOS o con `POST /users`.
 | `PUT` | `/places/routes/active` | Crear Ruta: guarda la ruta calculada en el dispositivo y cancela la abierta anterior |
 | `GET` | `/places/routes/active` | Ruta activa o pausada del usuario (404 `active_route_not_found`) |
 | `PUT` | `/places/routes/{route_id}/destination` | Modificar Ruta: misma ruta, nuevo recorrido desde la ubicación actual; progreso a 0. 404 `route_not_found`, 409 `route_not_open` |
+| `PUT` | `/places/routes/{route_id}/reroute` | Recalcular Ruta: mismo destino, recorrido nuevo desde donde se desvió el usuario (cuerpo de crear ruta + `rerouted_at`). Conserva el id, progreso a 0, queda activa y suma `reroute_count` / `last_rerouted_at` (hora del dispositivo acotada entre el inicio y ahora). 404 `route_not_found`, 409 `route_not_open` o `route_destination_mismatch` (para otro destino se usa `/destination`) |
 | `POST` | `/places/routes/{route_id}/finish` | Finalizar Ruta: `{"status": "completed" \| "cancelled", "finished_at"}` con la hora del dispositivo (acotada entre el inicio y ahora). Si ya estaba cerrada no cambia nada; 404 `route_not_found` |
 | `POST` | `/places/routes/history` | Guardar una ruta finalizada sin conexión que nunca llegó al backend (cuerpo de crear ruta + `id`, `status`, `started_at`, `finished_at`). No toca la ruta activa; reenviar el mismo `id` no la duplica; 409 `route_id_conflict` si el id es de otro usuario |
 | `GET` | `/places/routes/history?limit=20&offset=0` | Consultar Rutas Recientes: rutas completadas o canceladas (al iniciar otra), de la más reciente a la más antigua por `finished_at`; sin la ruta abierta. `limit` 1–100 |
+
+`ActiveRoute` incluye `reroute_count` y `last_rerouted_at` (migración `0004`).
 
 Si tu base local se creó antes de renumerar la migración de rutas (`0002` → `0003`),
 recréala con `docker compose down -v`.

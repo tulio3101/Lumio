@@ -21,6 +21,19 @@ class RouteNotOpenError(AppError):
     message = "La ruta ya terminó o se canceló; no se puede cambiar su destino."
 
 
+class RouteNotOpenForRerouteError(RouteNotOpenError):
+    message = "La ruta ya terminó o se canceló; no se puede recalcular."
+
+
+class RouteDestinationMismatchError(AppError):
+    status_code = status.HTTP_409_CONFLICT
+    code = "route_destination_mismatch"
+    message = (
+        "El recorrido recalculado va hacia otro destino. Para cambiar el destino usa "
+        "PUT /places/routes/{route_id}/destination."
+    )
+
+
 class RouteIdConflictError(AppError):
     status_code = status.HTTP_409_CONFLICT
     code = "route_id_conflict"

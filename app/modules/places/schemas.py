@@ -75,6 +75,21 @@ class RouteDestinationChange(RouteCreate):
     """
 
 
+class RouteReroute(RouteCreate):
+    """Recorrido recalculado en el cliente al desviarse de la ruta (Recalcular Ruta).
+
+    Va hacia el mismo destino desde la ubicación actual: sustituye origen, pasos,
+    distancia y duración de la misma ruta; el progreso vuelve al primer paso.
+    """
+
+    rerouted_at: AwareDatetime = Field(
+        description=(
+            "Cuándo se recalculó en el dispositivo. Puede ser anterior a la petición si se "
+            "sincroniza después de un fallo del backend."
+        )
+    )
+
+
 class RouteFinish(BaseModel):
     """Finalizar una ruta abierta (Finalizar Ruta)."""
 
@@ -124,6 +139,8 @@ class ActiveRoute(BaseModel):
     current_step: int = Field(ge=0)
     status: RouteStatus
     started_at: datetime
+    reroute_count: int = Field(default=0, ge=0, description="Veces que se recalculó al desviarse.")
+    last_rerouted_at: datetime | None = None
 
 
 class RouteHistoryItem(BaseModel):

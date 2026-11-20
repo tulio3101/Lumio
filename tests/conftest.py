@@ -6,7 +6,7 @@ os.environ.setdefault("JWT_SECRET", "secreto-de-pruebas-con-al-menos-32-bytes")
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import create_engine  # noqa: E402
+from sqlalchemy import create_engine, event  # noqa: E402
 from sqlalchemy.orm import Session, sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
@@ -21,6 +21,8 @@ def db() -> Iterator[Session]:
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
+    # Como en Postgres: respetar las llaves foráneas y su ON DELETE CASCADE.
+    event.listen(engine, "connect", lambda conn, _: conn.execute("PRAGMA foreign_keys=ON"))
     Base.metadata.create_all(engine)
     with sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)() as session:
         yield session

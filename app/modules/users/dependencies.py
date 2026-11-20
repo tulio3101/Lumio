@@ -1,6 +1,8 @@
 """Identificación del usuario que hace la petición con el access token.
 
 - ``CurrentUser``: usuario autenticado (``Authorization: Bearer <access_token>``).
+- ``CurrentSession``: la sesión (dispositivo) del access token, p. ej. para cerrar las
+  demás al cambiar la contraseña.
 - ``CurrentUserId``: solo su id, para módulos que no necesitan el usuario completo
   (por ejemplo, las rutas). Así no dependen de cómo se autentica la petición.
 """
@@ -14,7 +16,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.core.db import DbSession
 from app.core.errors import AppError
 from app.modules.users import service
-from app.modules.users.models import User
+from app.modules.users.models import AuthSession, User
 
 _bearer = HTTPBearer(auto_error=False, description="Access token emitido por /users/login")
 
@@ -46,3 +48,18 @@ def get_current_user_id(user: CurrentUser) -> uuid.UUID:
 
 
 CurrentUserId = Annotated[uuid.UUID, Depends(get_current_user_id)]
+
+
+def get_current_session(
+    db: DbSession,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+) -> AuthSession:
+    if credentials is None:
+        raise InvalidSessionError()
+    try:
+        return service.resolve_session(db, credentials.credentials, "access")
+    except service.InvalidToken:
+        raise InvalidSessionError() from None
+
+
+CurrentSession = Annotated[AuthSession, Depends(get_current_session)]

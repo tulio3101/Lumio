@@ -25,6 +25,16 @@ alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
+## Cuenta
+
+| Método | Ruta | Uso |
+|---|---|---|
+| `DELETE` | `/users/me` | Eliminar Cuenta (SCRUM-7): con `Authorization: Bearer <access_token>`, borra la cuenta y en cascada sus sesiones de todos los dispositivos, la ruta activa y el historial (y los contactos de confianza y eventos SOS, que deben declarar su FK con `ondelete="CASCADE"`). 204 sin cuerpo; luego sus tokens responden 401 y el login con ese correo 401. El correo puede registrarse de nuevo como una cuenta vacía. 401 `invalid_session`, 500 `account_deletion_failed` o 503 `database_unavailable` (en ambos la cuenta sigue intacta) |
+
+Las preferencias de voz y háptica viven solo en el teléfono: las borra la app al eliminar
+la cuenta. Por ahora no se conserva ningún dato por razones legales (pendiente de confirmar
+en la HU).
+
 ## Rutas
 
 Todos los endpoints de `/places` exigen `Authorization: Bearer <access_token>` (el de

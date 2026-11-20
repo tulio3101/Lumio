@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, status
 
 from app.core.db import DbSession
+from app.core.errors import ErrorResponse
 from app.modules.users import service
 from app.modules.users.dependencies import CurrentUser
 from app.modules.users.schemas import (
@@ -88,3 +89,33 @@ def logout(payload: RefreshRequest, db: DbSession) -> None:
 @router.get("/me", response_model=UserRead, summary="Usuario autenticado")
 def me(user: CurrentUser) -> UserRead:
     return user
+
+
+@router.delete(
+    "/me",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Eliminar cuenta",
+    description=(
+        "Elimina de forma definitiva la cuenta del usuario autenticado y sus datos "
+        "asociados: sesiones de todos los dispositivos, ruta activa e historial de rutas "
+        "(y contactos de confianza y eventos SOS cuando existan). No se puede deshacer. "
+        "Después los tokens de la cuenta responden 401 y el inicio de sesión con ese correo "
+        "falla; el correo puede registrarse de nuevo como una cuenta nueva."
+    ),
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorResponse,
+            "description": "Falta el access token o la sesión no es válida.",
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "model": ErrorResponse,
+            "description": "No se pudo eliminar (`account_deletion_failed`); la cuenta sigue.",
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "model": ErrorResponse,
+            "description": "Persistencia no disponible; la cuenta sigue.",
+        },
+    },
+)
+def delete_me(user: CurrentUser, db: DbSession) -> None:
+    service.delete_account(db, user)

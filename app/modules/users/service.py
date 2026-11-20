@@ -1,15 +1,19 @@
+import logging
 import uuid
 from datetime import timedelta
 
 import jwt
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.security import create_token, decode_token, hash_password, verify_password
 from app.modules.users import repository
+from app.modules.users.exceptions import AccountDeletionError
 from app.modules.users.models import AuthSession, User
 from app.modules.users.schemas import TokenPair, UserCreate, UserLogin
+
+logger = logging.getLogger(__name__)
 
 # Se verifica contra este hash cuando el correo no existe, para que el tiempo de
 # respuesta no revele qué correos están registrados.
@@ -97,3 +101,22 @@ def refresh(db: Session, refresh_token: str) -> TokenPair:
 
 def logout(db: Session, refresh_token: str) -> None:
     repository.revoke_session(db, resolve_session(db, refresh_token, "refresh"))
+
+
+def delete_account(db: Session, user: User) -> None:
+    """Elimina la cuenta y, en cascada, sus sesiones, rutas y demás datos asociados.
+
+    Después ningún token de la cuenta es válido y el correo queda libre para registrar
+    una cuenta nueva, que no hereda nada de la anterior.
+    """
+    try:
+        repository.delete_user(db, user.id)
+    except OperationalError:
+        # Base de datos caída: el manejador global responde 503 y la cuenta sigue intacta.
+        db.rollback()
+        raise
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("No se pudo eliminar la cuenta %s", user.id)
+        raise AccountDeletionError() from exc
+    logger.info("Cuenta %s eliminada", user.id)

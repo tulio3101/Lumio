@@ -18,6 +18,14 @@ def test_openapi_exposes_module_contracts(client):
         assert schema in spec["components"]["schemas"]
 
 
+def test_delete_account_contract_documents_errors(client):
+    spec = client.get("/openapi.json").json()
+    delete = spec["paths"]["/users/me"]["delete"]
+
+    assert {"204", "401", "500", "503"} <= delete["responses"].keys()
+    assert {"HTTPBearer": []} in delete["security"]
+
+
 def test_docs_are_served(client):
     assert client.get("/docs").status_code == 200
 

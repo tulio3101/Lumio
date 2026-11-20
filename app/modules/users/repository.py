@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.modules.users.models import AuthSession, User
@@ -37,4 +37,12 @@ def get_session(db: Session, session_id: uuid.UUID) -> AuthSession | None:
 
 def revoke_session(db: Session, auth_session: AuthSession) -> None:
     auth_session.revoked_at = datetime.now(UTC)
+    db.commit()
+
+
+def delete_user(db: Session, user_id: uuid.UUID) -> None:
+    """Borra el usuario; la base borra en cascada todo lo que lo referencia (sesiones,
+    rutas y las tablas futuras con ``ondelete="CASCADE"``). Si ya no existía, no hace nada.
+    """
+    db.execute(delete(User).where(User.id == user_id))
     db.commit()

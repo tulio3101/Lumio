@@ -15,6 +15,10 @@ class User(Base):
     # Null para cuentas creadas solo con Google.
     password_hash: Mapped[str | None] = mapped_column(String(255))
     google_sub: Mapped[str | None] = mapped_column(String(255), unique=True)
+    # Datos de perfil (Personalizar Cuenta), opcionales. Ver UserProfileUpdate.
+    display_name: Mapped[str | None] = mapped_column(String(60))
+    # Celular colombiano: 10 dígitos que empiezan por 3, sin prefijo.
+    phone: Mapped[str | None] = mapped_column(String(10))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

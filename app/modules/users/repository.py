@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app.modules.users.models import AuthSession, User
@@ -45,4 +45,29 @@ def delete_user(db: Session, user_id: uuid.UUID) -> None:
     rutas y las tablas futuras con ``ondelete="CASCADE"``). Si ya no existía, no hace nada.
     """
     db.execute(delete(User).where(User.id == user_id))
+    db.commit()
+
+
+def update_profile(db: Session, user: User, changes: dict[str, str | None]) -> User:
+    for field, value in changes.items():
+        setattr(user, field, value)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def change_password(
+    db: Session, user: User, password_hash: str, keep_session_id: uuid.UUID
+) -> None:
+    """Cambia el hash y, en la misma transacción, revoca las demás sesiones activas."""
+    user.password_hash = password_hash
+    db.execute(
+        update(AuthSession)
+        .where(
+            AuthSession.user_id == user.id,
+            AuthSession.id != keep_session_id,
+            AuthSession.revoked_at.is_(None),
+        )
+        .values(revoked_at=datetime.now(UTC))
+    )
     db.commit()

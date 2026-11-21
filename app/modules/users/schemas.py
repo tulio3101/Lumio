@@ -1,7 +1,17 @@
+import re
+import unicodedata
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+DISPLAY_NAME_MAX_LENGTH = 60
+# Letras (con tildes y ñ), espacios, apóstrofo (recto o tipográfico), punto y guion.
+_NAME_SYMBOLS = frozenset(" '’.-")
+# Celular colombiano sin prefijo: 10 dígitos que empiezan por 3.
+_PHONE = re.compile(r"3\d{9}")
+# Separadores que se aceptan al escribir el número y se quitan al guardar.
+_PHONE_SEPARATORS = re.compile(r"[\s-]")
 
 
 class UserCreate(BaseModel):
@@ -31,7 +41,81 @@ class RefreshRequest(BaseModel):
 class UserRead(BaseModel):
     id: uuid.UUID
     email: EmailStr
+    display_name: str | None = Field(
+        default=None, description="Nombre para mostrar; null si no lo ha puesto."
+    )
+    phone: str | None = Field(
+        default=None,
+        description="Celular colombiano de 10 dígitos sin prefijo; null si no lo ha puesto.",
+        examples=["3001234567"],
+    )
     created_at: datetime
+
+
+def normalize_display_name(value: str | None) -> str | None:
+    """Recorta y une los espacios; vacío equivale a quitar el nombre."""
+    if value is None:
+        return None
+    # NFC: «á» escrita como «a» + tilde combinante cuenta como una sola letra.
+    name = " ".join(unicodedata.normalize("NFC", value).split())
+    if not name:
+        return None
+    if len(name) > DISPLAY_NAME_MAX_LENGTH:
+        raise ValueError(f"El nombre puede tener como máximo {DISPLAY_NAME_MAX_LENGTH} caracteres.")
+    if not any(char.isalpha() for char in name) or not all(
+        char.isalpha() or char in _NAME_SYMBOLS for char in name
+    ):
+        raise ValueError(
+            "El nombre solo puede tener letras, espacios, apóstrofos, puntos y guiones."
+        )
+    return name
+
+
+def normalize_phone(value: str | None) -> str | None:
+    """Quita espacios y guiones; vacío equivale a quitar el celular."""
+    if value is None:
+        return None
+    phone = _PHONE_SEPARATORS.sub("", value)
+    if not phone:
+        return None
+    if not _PHONE.fullmatch(phone):
+        raise ValueError("El celular debe tener 10 dígitos y empezar por 3.")
+    return phone
+
+
+class UserProfileUpdate(BaseModel):
+    """Cambios parciales del perfil: solo se modifican los campos enviados. Enviar null
+    o una cadena vacía quita el dato. El correo no se puede cambiar."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str | None = Field(
+        default=None,
+        max_length=200,
+        description=(
+            "Nombre para mostrar: 1 a 60 caracteres tras recortar espacios; letras, "
+            "espacios, apóstrofos, puntos y guiones."
+        ),
+        examples=["Ana María Pérez"],
+    )
+    phone: str | None = Field(
+        default=None,
+        max_length=20,
+        description="Celular colombiano: 10 dígitos que empiezan por 3. Admite espacios y guiones.",
+        examples=["300 123 4567"],
+    )
+
+    _normalize_display_name = field_validator("display_name")(normalize_display_name)
+    _normalize_phone = field_validator("phone")(normalize_phone)
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(max_length=128, description="Contraseña actual.")
+    new_password: str = Field(
+        min_length=8,
+        max_length=128,
+        description="Nueva contraseña; mismas reglas que al crear la cuenta.",
+    )
 
 
 class TokenPair(BaseModel):

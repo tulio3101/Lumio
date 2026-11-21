@@ -26,6 +26,19 @@ def test_delete_account_contract_documents_errors(client):
     assert {"HTTPBearer": []} in delete["security"]
 
 
+def test_profile_contracts_document_errors(client):
+    spec = client.get("/openapi.json").json()
+    patch = spec["paths"]["/users/me"]["patch"]
+    password = spec["paths"]["/users/me/password"]["put"]
+
+    assert {"200", "401", "422", "500", "503"} <= patch["responses"].keys()
+    assert {"204", "401", "403", "409", "422", "500", "503"} <= password["responses"].keys()
+    assert {"display_name", "phone"} <= spec["components"]["schemas"]["UserRead"][
+        "properties"
+    ].keys()
+    assert "UserProfileUpdate" in spec["components"]["schemas"]
+
+
 def test_docs_are_served(client):
     assert client.get("/docs").status_code == 200
 

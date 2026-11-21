@@ -9,9 +9,22 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.security import create_token, decode_token, hash_password, verify_password
 from app.modules.users import repository
-from app.modules.users.exceptions import AccountDeletionError
+from app.modules.users.exceptions import (
+    AccountDeletionError,
+    InvalidCurrentPasswordError,
+    PasswordChangeError,
+    PasswordNotSetError,
+    PasswordUnchangedError,
+    ProfileUpdateError,
+)
 from app.modules.users.models import AuthSession, User
-from app.modules.users.schemas import TokenPair, UserCreate, UserLogin
+from app.modules.users.schemas import (
+    PasswordChange,
+    TokenPair,
+    UserCreate,
+    UserLogin,
+    UserProfileUpdate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -120,3 +133,38 @@ def delete_account(db: Session, user: User) -> None:
         logger.exception("No se pudo eliminar la cuenta %s", user.id)
         raise AccountDeletionError() from exc
     logger.info("Cuenta %s eliminada", user.id)
+
+
+def update_profile(db: Session, user: User, payload: UserProfileUpdate) -> User:
+    """Guarda solo los campos enviados (ya validados y normalizados por el esquema)."""
+    changes = payload.model_dump(exclude_unset=True)
+    try:
+        return repository.update_profile(db, user, changes)
+    except OperationalError:
+        db.rollback()
+        raise
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("No se pudo actualizar el perfil de %s", user.id)
+        raise ProfileUpdateError() from exc
+
+
+def change_password(db: Session, user: User, session: AuthSession, payload: PasswordChange) -> None:
+    """Exige la contraseña actual. Esta sesión sigue abierta; las de los demás
+    dispositivos se cierran."""
+    if user.password_hash is None:
+        raise PasswordNotSetError()
+    if not verify_password(payload.current_password, user.password_hash):
+        raise InvalidCurrentPasswordError()
+    if verify_password(payload.new_password, user.password_hash):
+        raise PasswordUnchangedError()
+    try:
+        repository.change_password(db, user, hash_password(payload.new_password), session.id)
+    except OperationalError:
+        db.rollback()
+        raise
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("No se pudo cambiar la contraseña de %s", user.id)
+        raise PasswordChangeError() from exc
+    logger.info("Contraseña de %s cambiada; otras sesiones revocadas", user.id)

@@ -9,6 +9,8 @@ from app.modules.users.dependencies import CurrentSession, CurrentUser
 from app.modules.users.schemas import (
     GoogleAuthRequest,
     PasswordChange,
+    PreferencesRead,
+    PreferencesUpdate,
     RefreshRequest,
     TokenPair,
     UserCreate,
@@ -135,6 +137,45 @@ def update_me(payload: UserProfileUpdate, user: CurrentUser, db: DbSession) -> U
     return service.update_profile(db, user, payload)
 
 
+@router.get(
+    "/me/preferences",
+    response_model=PreferencesRead,
+    summary="Consultar preferencias de voz y vibración",
+    description=(
+        "Copia de respaldo de las preferencias del teléfono. Si la cuenta nunca guardó, "
+        "devuelve las predeterminadas con `updated_at` null. El teléfono no espera esta "
+        "respuesta para aplicar sus preferencias."
+    ),
+    responses=_SESSION_ERRORS,
+)
+def get_my_preferences(user: CurrentUser, db: DbSession) -> PreferencesRead:
+    return service.get_preferences(db, user)
+
+
+@router.put(
+    "/me/preferences",
+    response_model=PreferencesRead,
+    summary="Guardar preferencias de voz y vibración",
+    description=(
+        "Reemplaza todas las preferencias. `voice_language`: variante de español (es-MX, "
+        "es-ES, es-419…). `speech_rate`: de 0,5 a 2. `haptic_intensity`: soft, medium o "
+        "strong. `haptic_disabled_events`: solo routeReady, routeFailed y routeFinished; las "
+        "alertas de seguridad no se pueden apagar. Devuelve lo guardado con `updated_at`."
+    ),
+    responses={
+        **_SESSION_ERRORS,
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "model": ErrorResponse,
+            "description": "No se pudo guardar (`preferences_update_failed`); no cambió nada.",
+        },
+    },
+)
+def put_my_preferences(
+    payload: PreferencesUpdate, user: CurrentUser, db: DbSession
+) -> PreferencesRead:
+    return service.update_preferences(db, user, payload)
+
+
 @router.put(
     "/me/password",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -177,8 +218,8 @@ def change_password(
     summary="Eliminar cuenta",
     description=(
         "Elimina de forma definitiva la cuenta del usuario autenticado y sus datos "
-        "asociados: sesiones de todos los dispositivos, ruta activa e historial de rutas "
-        "(y contactos de confianza y eventos SOS cuando existan). No se puede deshacer. "
+        "asociados: sesiones de todos los dispositivos, ruta activa e historial de rutas, "
+        "contactos de confianza, eventos SOS y preferencias. No se puede deshacer. "
         "Después los tokens de la cuenta responden 401 y el inicio de sesión con ese correo "
         "falla; el correo puede registrarse de nuevo como una cuenta nueva."
     ),

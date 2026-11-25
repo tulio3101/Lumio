@@ -1,6 +1,6 @@
 import logging
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import jwt
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
@@ -15,11 +15,14 @@ from app.modules.users.exceptions import (
     PasswordChangeError,
     PasswordNotSetError,
     PasswordUnchangedError,
+    PreferencesUpdateError,
     ProfileUpdateError,
 )
 from app.modules.users.models import AuthSession, User
 from app.modules.users.schemas import (
     PasswordChange,
+    PreferencesRead,
+    PreferencesUpdate,
     TokenPair,
     UserCreate,
     UserLogin,
@@ -147,6 +150,38 @@ def update_profile(db: Session, user: User, payload: UserProfileUpdate) -> User:
         db.rollback()
         logger.exception("No se pudo actualizar el perfil de %s", user.id)
         raise ProfileUpdateError() from exc
+
+
+def get_preferences(db: Session, user: User) -> PreferencesRead:
+    """Las guardadas o, si la cuenta nunca guardó, las predeterminadas (updated_at null)."""
+    stored = repository.get_preferences(db, user.id)
+    if stored is None:
+        return PreferencesRead()
+    return PreferencesRead.model_validate(stored)
+
+
+def update_preferences(db: Session, user: User, payload: PreferencesUpdate) -> PreferencesRead:
+    """Reemplaza las preferencias (ya validadas por el esquema). Si otra petición creó la
+    fila al mismo tiempo, se reintenta una vez como actualización."""
+    values = payload.model_dump(mode="json")
+    values["updated_at"] = datetime.now(UTC)
+    for attempt in range(2):
+        try:
+            stored = repository.save_preferences(db, user.id, values)
+            return PreferencesRead.model_validate(stored)
+        except OperationalError:
+            db.rollback()
+            raise
+        except IntegrityError as exc:
+            db.rollback()
+            if attempt:
+                logger.exception("No se pudieron guardar las preferencias de %s", user.id)
+                raise PreferencesUpdateError() from exc
+        except SQLAlchemyError as exc:
+            db.rollback()
+            logger.exception("No se pudieron guardar las preferencias de %s", user.id)
+            raise PreferencesUpdateError() from exc
+    raise PreferencesUpdateError()
 
 
 def change_password(db: Session, user: User, session: AuthSession, payload: PasswordChange) -> None:

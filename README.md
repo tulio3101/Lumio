@@ -31,12 +31,15 @@ uvicorn app.main:app --reload
 |---|---|---|
 | `GET` | `/users/me` | Cuenta del usuario: `email`, `display_name` y `phone` (los dos últimos pueden ser `null`) |
 | `PATCH` | `/users/me` | Personalizar Cuenta (SCRUM-6): cambia solo los campos enviados; `null` o `""` los quita. `display_name`: 1–60 caracteres tras recortar y unir espacios, letras, espacios, `'`, `.` y `-`. `phone`: celular colombiano, 10 dígitos que empiezan por 3 (acepta espacios y guiones; se guarda sin ellos). El correo no se puede cambiar (otros campos: 422). Devuelve la cuenta. 422 datos inválidos, 500 `profile_update_failed`, 503 |
+| `GET` | `/users/me/preferences` | Preferencias de voz y vibración (copia de respaldo del teléfono). Sin guardar: las predeterminadas con `updated_at: null`. 401, 503 |
+| `PUT` | `/users/me/preferences` | Reemplaza todas: `voice_language` (`es-MX`, `es-ES`, `es-419`…), `voice_identifier` (o `null`), `speech_rate` (0,5–2), `haptics_enabled`, `haptic_intensity` (`soft`, `medium`, `strong`) y `haptic_disabled_events` (solo `routeReady`, `routeFailed`, `routeFinished`). 200 con lo guardado y `updated_at`. 422 datos inválidos, 500 `preferences_update_failed`, 503 |
 | `PUT` | `/users/me/password` | Cambiar contraseña: `{"current_password", "new_password"}` (8–128, distinta de la actual). 204; este dispositivo conserva su sesión y las demás se revocan. 403 `invalid_current_password` (no 401, para que el cliente no renueve la sesión), 409 `password_not_set` (cuenta solo Google), 422 inválida o `password_unchanged`, 500 `password_change_failed`, 503 |
 | `DELETE` | `/users/me` | Eliminar Cuenta (SCRUM-7): con `Authorization: Bearer <access_token>`, borra la cuenta y en cascada sus sesiones de todos los dispositivos, la ruta activa y el historial (y los contactos de confianza y eventos SOS, que deben declarar su FK con `ondelete="CASCADE"`). 204 sin cuerpo; luego sus tokens responden 401 y el login con ese correo 401. El correo puede registrarse de nuevo como una cuenta vacía. 401 `invalid_session`, 500 `account_deletion_failed` o 503 `database_unavailable` (en ambos la cuenta sigue intacta) |
 
 El perfil (nombre y celular) llega con la migración `0005`. Las preferencias de voz y
-háptica viven solo en el teléfono (`UserPreferences`), no en este perfil: las borra la app al eliminar
-la cuenta. Por ahora no se conserva ningún dato por razones legales (pendiente de confirmar
+vibración (`user_preferences`, migración `0008`) son una copia de respaldo: el teléfono las lee
+siempre de su almacenamiento local y nunca espera al backend para aplicarlas; se borran en
+cascada al eliminar la cuenta. Por ahora no se conserva ningún dato por razones legales (pendiente de confirmar
 en la HU).
 
 ## Contactos de confianza

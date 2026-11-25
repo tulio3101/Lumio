@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.core.db import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
+from app.modules.contacts import models as _contacts_models  # noqa: E402, F401
 from app.modules.places import models as _places_models  # noqa: E402, F401
 from app.modules.users import models as _users_models  # noqa: E402, F401
 

@@ -2,6 +2,7 @@ import re
 import unicodedata
 import uuid
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -107,6 +108,75 @@ class UserProfileUpdate(BaseModel):
 
     _normalize_display_name = field_validator("display_name")(normalize_display_name)
     _normalize_phone = field_validator("phone")(normalize_phone)
+
+
+SPEECH_RATE_MIN = 0.5
+SPEECH_RATE_MAX = 2.0
+# Variante de español en BCP-47: es-MX, es-ES, es-419…
+_VOICE_LANGUAGE = r"^es-(?:[A-Z]{2}|419)$"
+
+
+class HapticIntensity(StrEnum):
+    SOFT = "soft"
+    MEDIUM = "medium"
+    STRONG = "strong"
+
+
+class HapticEvent(StrEnum):
+    """Eventos que el usuario puede apagar. Las alertas críticas y las del botón de
+    emergencia vibran siempre y no se aceptan aquí."""
+
+    ROUTE_READY = "routeReady"
+    ROUTE_FAILED = "routeFailed"
+    ROUTE_FINISHED = "routeFinished"
+
+
+class PreferencesUpdate(BaseModel):
+    """Preferencias completas de voz y vibración: siempre se envían todas (reemplazo).
+    Mismas reglas que en el teléfono."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    voice_language: str = Field(
+        default="es-MX",
+        pattern=_VOICE_LANGUAGE,
+        description="Variante de español de la voz (BCP-47).",
+        examples=["es-MX"],
+    )
+    voice_identifier: str | None = Field(
+        default=None,
+        max_length=255,
+        description="Voz del sistema elegida; null usa la predeterminada del idioma.",
+    )
+    speech_rate: float = Field(
+        default=1.0,
+        ge=SPEECH_RATE_MIN,
+        le=SPEECH_RATE_MAX,
+        description="Veces la velocidad normal: de 0,5 a 2.",
+        examples=[1.25],
+    )
+    haptics_enabled: bool = Field(default=True, description="Vibración de los eventos de ruta.")
+    haptic_intensity: HapticIntensity = Field(default=HapticIntensity.MEDIUM)
+    haptic_disabled_events: list[HapticEvent] = Field(
+        default_factory=list,
+        max_length=len(HapticEvent),
+        description="Eventos de ruta que no vibran. Las alertas de seguridad no se pueden apagar.",
+    )
+
+    @field_validator("haptic_disabled_events")
+    @classmethod
+    def _unique_events(cls, events: list[HapticEvent]) -> list[HapticEvent]:
+        # Sin repetidos y en un orden estable.
+        return sorted(set(events))
+
+
+class PreferencesRead(PreferencesUpdate):
+    model_config = ConfigDict(extra="forbid", from_attributes=True)
+
+    updated_at: datetime | None = Field(
+        default=None,
+        description="Cuándo se guardaron; null si la cuenta nunca guardó preferencias.",
+    )
 
 
 class PasswordChange(BaseModel):

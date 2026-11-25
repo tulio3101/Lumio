@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
-from app.modules.users.models import AuthSession, User
+from app.modules.users.models import AuthSession, User, UserPreferences
 
 
 def get_by_email(db: Session, email: str) -> User | None:
@@ -54,6 +54,24 @@ def update_profile(db: Session, user: User, changes: dict[str, str | None]) -> U
     db.commit()
     db.refresh(user)
     return user
+
+
+def get_preferences(db: Session, user_id: uuid.UUID) -> UserPreferences | None:
+    return db.get(UserPreferences, user_id)
+
+
+def save_preferences(db: Session, user_id: uuid.UUID, values: dict) -> UserPreferences:
+    """Crea o reemplaza la fila de preferencias de la cuenta."""
+    preferences = db.get(UserPreferences, user_id)
+    if preferences is None:
+        preferences = UserPreferences(user_id=user_id, **values)
+        db.add(preferences)
+    else:
+        for field, value in values.items():
+            setattr(preferences, field, value)
+    db.commit()
+    db.refresh(preferences)
+    return preferences
 
 
 def change_password(

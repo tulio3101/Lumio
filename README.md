@@ -62,6 +62,30 @@ Los errores propios llevan `{"detail": <mensaje en español>, "code": <identific
 locuta `detail`. Los 422 de validación usan el formato estándar de FastAPI. No se envía ningún
 correo de verificación al contacto; el envío de la alerta es del botón de emergencia.
 
+## Botón de emergencia
+
+Alerta por correo a los contactos de confianza (SCRUM-35). `POST /sos` exige
+`Authorization: Bearer <access_token>`. El ADR-310 fija Amazon SES; la tabla `sos_events`
+llega con la migración `0007` y se borra en cascada con la cuenta.
+
+| Método | Ruta | Uso |
+|---|---|---|
+| `POST` | `/sos` | `{"idempotency_key": <uuid>, "latitude"?, "longitude"?, "accuracy_m"?}`. Manda un correo por contacto con quién lo envía, la hora, el enlace al mapa y que es una alerta de emergencia. Sin ubicación se envía igual, avisándolo en el correo (`latitude` y `longitude` van juntas o ninguna). 201 con `{id, status, contacts_total, contacts_sent, location_included, created_at}`; `status` es `sent` (todos) o `partial` (algunos). Repetir la misma `idempotency_key` de una alerta ya entregada responde 200 con la misma alerta y no envía nada; una que falló se reintenta. 409 `no_trusted_contacts` (no se envía nada), 502 `sos_delivery_failed` (no salió a ningún contacto), 500 `sos_record_failed`, 422, 401, 503 |
+
+El correo es de texto plano y dice que no sustituye a los servicios de emergencia (con la
+línea 123). Solo correo: sin push ni ubicación en tiempo real.
+
+Configuración: `EMAIL_BACKEND` (`log` o `ses`) y `SES_SENDER_EMAIL`. Con `log` el correo solo se
+escribe en los logs y solo funciona con `ENVIRONMENT=local`: en `dev` y `prod` sin SES el
+envío responde 502 en lugar de fingir que salió. Con `ses` la EC2 usa su rol (`ses:SendEmail`,
+ya en `infra/lumio-dev.yaml`). `deploy.sh` activa SES si existe el parámetro
+`/lumio/<env>/SES_SENDER_EMAIL`.
+
+**Pendiente fuera del código** (ADR-310): comprar y verificar el dominio en SES (Easy DKIM,
+SPF, DMARC), crear el parámetro `SES_SENDER_EMAIL`, aplicar el stack de CloudFormation para dar
+el permiso a la EC2 y **pedir la salida del sandbox de SES**: en sandbox solo se envía a
+direcciones verificadas y los contactos no lo estarán.
+
 ## Rutas
 
 Todos los endpoints de `/places` exigen `Authorization: Bearer <access_token>` (el de

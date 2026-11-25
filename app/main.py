@@ -5,6 +5,7 @@ from app.core.errors import register_exception_handlers
 from app.modules.contacts.router import router as contacts_router
 from app.modules.narration.router import router as narration_router
 from app.modules.places.router import router as places_router
+from app.modules.sos.router import router as sos_router
 from app.modules.users.router import router as users_router
 from app.modules.vision_orchestration.router import router as vision_orchestration_router
 from app.modules.voice.router import router as voice_router
@@ -27,6 +28,7 @@ def create_app() -> FastAPI:
             {"name": "vision-orchestration", "description": "Análisis de frames del entorno."},
             {"name": "narration", "description": "Generación de narración para el usuario."},
             {"name": "places", "description": "Ruta activa e historial de rutas."},
+            {"name": "sos", "description": "Botón de emergencia: alerta por correo."},
             {
                 "name": "contacts",
                 "description": "Contactos de confianza que reciben la alerta de emergencia.",
@@ -46,6 +48,7 @@ def create_app() -> FastAPI:
         narration_router,
         places_router,
         contacts_router,
+        sos_router,
     ):
         app.include_router(router)
 

@@ -17,6 +17,9 @@ param() {
 }
 JWT_SECRET="$(param JWT_SECRET)"
 DB_PASSWORD="$(param DB_PASSWORD)"
+# Remitente verificado en SES para las alertas de emergencia. Es opcional: sin este parámetro la
+# API despliega igual, pero el envío de alertas falla con un error claro (no finge enviar).
+SES_SENDER_EMAIL="$(param SES_SENDER_EMAIL 2>/dev/null || true)"
 
 # 2. Archivo .env para Compose, legible solo por root.
 umask 077
@@ -30,6 +33,12 @@ DEBUG=false
 DATABASE_URL=postgresql+psycopg://lumio:$DB_PASSWORD@$DB_HOST:5432/lumio
 JWT_SECRET=$JWT_SECRET
 EOF
+if [ -n "$SES_SENDER_EMAIL" ]; then
+  {
+    echo "EMAIL_BACKEND=ses"
+    echo "SES_SENDER_EMAIL=$SES_SENDER_EMAIL"
+  } >> .env
+fi
 
 # 3. Descargar la imagen desde ECR con el rol de la instancia.
 aws ecr get-login-password --region "$AWS_REGION" \

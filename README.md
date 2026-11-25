@@ -39,6 +39,29 @@ háptica viven solo en el teléfono (`UserPreferences`), no en este perfil: las 
 la cuenta. Por ahora no se conserva ningún dato por razones legales (pendiente de confirmar
 en la HU).
 
+## Contactos de confianza
+
+Contactos que recibirán por correo la alerta del botón de emergencia (SCRUM-319). Todos los
+endpoints de `/contacts` exigen `Authorization: Bearer <access_token>`; sin token o con uno
+inválido responden 401 `invalid_session`. Cada usuario solo ve y modifica los suyos (el
+contacto de otro responde 404). La tabla llega con la migración `0006` y se borra en cascada
+al eliminar la cuenta.
+
+Reglas: `name` de 1 a 60 caracteres tras recortar y unir espacios (letras, espacios, `'`, `.` y
+`-`); `email` con formato válido, se guarda sin espacios laterales y en minúsculas. El correo no
+se repite entre tus contactos, no puede ser el de tu cuenta y hay un máximo de 5 por usuario.
+
+| Método | Ruta | Uso |
+|---|---|---|
+| `GET` | `/contacts` | Lista los contactos, del más antiguo al más reciente: `[{id, name, email, created_at}]` |
+| `POST` | `/contacts` | Agrega uno: `{"name", "email"}`. 201 con el contacto. 409 `contact_duplicate` o `contact_limit_reached`, 422 datos inválidos o `contact_is_own_email`, 500 `contact_save_failed`, 503 |
+| `PUT` | `/contacts/{contact_id}` | Edita el nombre y el correo (siempre los dos). 200 con el contacto. 404 `contact_not_found`, 409 `contact_duplicate`, 422, 500 `contact_save_failed`, 503 |
+| `DELETE` | `/contacts/{contact_id}` | Elimina el contacto. 204 sin cuerpo. 404 `contact_not_found`, 500 `contact_delete_failed`, 503 |
+
+Los errores propios llevan `{"detail": <mensaje en español>, "code": <identificador>}`: la app
+locuta `detail`. Los 422 de validación usan el formato estándar de FastAPI. No se envía ningún
+correo de verificación al contacto; el envío de la alerta es del botón de emergencia.
+
 ## Rutas
 
 Todos los endpoints de `/places` exigen `Authorization: Bearer <access_token>` (el de

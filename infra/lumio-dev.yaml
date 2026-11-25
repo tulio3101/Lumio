@@ -237,6 +237,11 @@ Resources:
                 Resource:
                   - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/lumio/${EnvName}
                   - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/lumio/${EnvName}/*
+              - Sid: EnviarAlertasDeEmergenciaPorCorreo
+                Effect: Allow
+                Action:
+                  - ses:SendEmail
+                Resource: !Sub arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/*
               - Sid: EscribirLogsDeLaApi
                 Effect: Allow
                 Action:

@@ -23,6 +23,18 @@ class Settings(BaseSettings):
     access_token_minutes: int = 15
     refresh_token_days: int = 30
 
+    # Correo (alertas de emergencia). «log» solo escribe el correo en los logs y únicamente
+    # sirve en local; en dev y prod hay que usar «ses» (ADR-310).
+    email_backend: Literal["log", "ses"] = "log"
+    ses_sender_email: str | None = None
+    aws_region: str = "us-east-1"
+
+    @model_validator(mode="after")
+    def _require_a_sender_for_ses(self) -> Self:
+        if self.email_backend == "ses" and not self.ses_sender_email:
+            raise ValueError("SES_SENDER_EMAIL es obligatorio cuando EMAIL_BACKEND=ses.")
+        return self
+
     @model_validator(mode="after")
     def _require_strong_jwt_secret_outside_local(self) -> Self:
         if self.environment == "local":

@@ -12,7 +12,10 @@ from app.modules.users import repository
 from app.modules.users.exceptions import (
     AccountDeletionError,
     GoogleAccountConflictError,
+    GoogleAccountInUseError,
+    GoogleAlreadyLinkedError,
     GoogleEmailNotVerifiedError,
+    GoogleLinkError,
     GoogleSignInError,
     InvalidCurrentPasswordError,
     PasswordChangeError,
@@ -125,6 +128,37 @@ def login_google(db: Session, identity: GoogleIdentity) -> tuple[TokenPair, bool
         raise GoogleSignInError() from exc
     logger.info("Cuenta %s creada con Google", user.id)
     return issue_tokens(db, user), True
+
+
+def link_google(db: Session, user: User, identity: GoogleIdentity) -> User:
+    """Asocia una cuenta de Google ya verificada a la cuenta con sesión iniciada.
+
+    Es la forma segura de unir Google a una cuenta con contraseña: quien la pide ya demostró
+    ser el dueño (access token), así que no hace falta que coincidan los correos. Repetirla
+    con la misma cuenta de Google no cambia nada. Desde entonces se puede entrar con
+    POST /users/login/google o con la contraseña.
+    """
+    if user.google_sub == identity.sub:
+        return user
+    if user.google_sub is not None:
+        raise GoogleAlreadyLinkedError()
+    if repository.get_by_google_sub(db, identity.sub) is not None:
+        raise GoogleAccountInUseError()
+    try:
+        user = repository.link_google(db, user, identity.sub)
+    except IntegrityError:
+        # Otra petición asoció esa cuenta de Google al mismo tiempo.
+        db.rollback()
+        raise GoogleAccountInUseError() from None
+    except OperationalError:
+        db.rollback()
+        raise
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("No se pudo asociar Google a la cuenta %s", user.id)
+        raise GoogleLinkError() from exc
+    logger.info("Cuenta %s asociada a Google", user.id)
+    return user
 
 
 def resolve_session(db: Session, token: str, token_type: str) -> AuthSession:

@@ -67,6 +67,29 @@ class GoogleAccountConflictError(AppError):
     message = "Ya existe una cuenta con ese correo. Inicia sesión con tu correo y contraseña."
 
 
+class InvalidGoogleLinkTokenError(InvalidGoogleTokenError):
+    # Al asociar con sesión iniciada: 403 y no 401, para que el cliente no renueve la sesión.
+    status_code = status.HTTP_403_FORBIDDEN
+
+
+class GoogleAlreadyLinkedError(AppError):
+    status_code = status.HTTP_409_CONFLICT
+    code = "google_already_linked"
+    message = "Tu cuenta de Lumio ya está asociada a otra cuenta de Google."
+
+
+class GoogleAccountInUseError(AppError):
+    status_code = status.HTTP_409_CONFLICT
+    code = "google_account_in_use"
+    message = "Esa cuenta de Google ya está asociada a otra cuenta de Lumio."
+
+
+class GoogleLinkError(AppError):
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    code = "google_link_failed"
+    message = "No se pudo asociar tu cuenta de Google. Tu cuenta sigue igual; intenta de nuevo."
+
+
 class GoogleAuthUnavailableError(AppError):
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     code = "google_auth_unavailable"

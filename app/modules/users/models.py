@@ -21,6 +21,11 @@ class User(Base):
     phone: Mapped[str | None] = mapped_column(String(10))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    @property
+    def google_linked(self) -> bool:
+        """Tiene una cuenta de Google asociada (creada con Google o vinculada después)."""
+        return self.google_sub is not None
+
 
 class AuthSession(Base):
     """Sesión de un dispositivo; su id es el claim `jti` de los tokens emitidos."""

@@ -61,6 +61,13 @@ def delete_user(db: Session, user_id: uuid.UUID) -> None:
     db.commit()
 
 
+def link_google(db: Session, user: User, google_sub: str) -> User:
+    user.google_sub = google_sub
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def update_profile(db: Session, user: User, changes: dict[str, str | None]) -> User:
     for field, value in changes.items():
         setattr(user, field, value)

@@ -50,6 +50,10 @@ class UserRead(BaseModel):
         description="Celular colombiano de 10 dígitos sin prefijo; null si no lo ha puesto.",
         examples=["3001234567"],
     )
+    google_linked: bool = Field(
+        default=False,
+        description="Si la cuenta tiene una cuenta de Google asociada para iniciar sesión.",
+    )
     created_at: datetime
 
 

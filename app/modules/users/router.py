@@ -7,7 +7,11 @@ from app.core.errors import ErrorResponse
 from app.modules.sos.email import EmailSenderDep
 from app.modules.users import password_reset, service
 from app.modules.users.dependencies import CurrentSession, CurrentUser
-from app.modules.users.exceptions import GoogleAuthUnavailableError, InvalidGoogleTokenError
+from app.modules.users.exceptions import (
+    GoogleAuthUnavailableError,
+    InvalidGoogleLinkTokenError,
+    InvalidGoogleTokenError,
+)
 from app.modules.users.google_auth import (
     GoogleAuthUnavailable,
     GoogleVerifierDep,
@@ -72,7 +76,8 @@ def login(payload: UserLogin, db: DbSession) -> TokenPair:
         "emisor, vigencia y que sea para un client ID de Lumio (`GOOGLE_CLIENT_IDS`). La "
         "cuenta se reconoce por el identificador de Google; si no existe se crea sin "
         "contraseña con el correo verificado (201). Si ese correo ya es de una cuenta con "
-        "contraseña no se vincula: hay que entrar con la contraseña (409)."
+        "contraseña no se vincula: hay que entrar con la contraseña (409) y asociar Google "
+        "con `POST /users/me/google`."
     ),
     responses={
         status.HTTP_201_CREATED: {"model": TokenPair, "description": "Cuenta nueva creada."},
@@ -246,6 +251,51 @@ def me(user: CurrentUser) -> UserRead:
 )
 def update_me(payload: UserProfileUpdate, user: CurrentUser, db: DbSession) -> UserRead:
     return service.update_profile(db, user, payload)
+
+
+@router.post(
+    "/me/google",
+    response_model=UserRead,
+    summary="Asociar una cuenta de Google",
+    description=(
+        "Asocia a la cuenta con sesión iniciada la cuenta de Google del ID token (mismas "
+        "verificaciones que `/users/login/google`). Así una cuenta creada con correo y "
+        "contraseña también puede entrar con Google; los correos no tienen que coincidir "
+        "porque el access token ya demuestra quién es el dueño. Repetirlo con la misma cuenta "
+        "de Google no cambia nada. Devuelve la cuenta con `google_linked: true`."
+    ),
+    responses={
+        **_SESSION_ERRORS,
+        status.HTTP_403_FORBIDDEN: {
+            "model": ErrorResponse,
+            "description": (
+                "Token de Google inválido, vencido o de otra app (`invalid_google_token`). "
+                "403 y no 401, para que el cliente no renueve la sesión."
+            ),
+        },
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorResponse,
+            "description": (
+                "La cuenta ya tiene otra cuenta de Google (`google_already_linked`) o esa "
+                "cuenta de Google es de otra cuenta de Lumio (`google_account_in_use`)."
+            ),
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "model": ErrorResponse,
+            "description": "No se pudo asociar (`google_link_failed`); no cambió nada.",
+        },
+    },
+)
+def link_google(
+    payload: GoogleAuthRequest, user: CurrentUser, db: DbSession, verifier: GoogleVerifierDep
+) -> UserRead:
+    try:
+        identity = verifier.verify(payload.id_token)
+    except InvalidGoogleToken:
+        raise InvalidGoogleLinkTokenError() from None
+    except GoogleAuthUnavailable:
+        raise GoogleAuthUnavailableError() from None
+    return service.link_google(db, user, identity)
 
 
 @router.get(

@@ -270,8 +270,9 @@ def get_my_preferences(user: CurrentUser, db: DbSession) -> PreferencesRead:
     description=(
         "Reemplaza todas las preferencias. `voice_language`: variante de español (es-MX, "
         "es-ES, es-419…). `speech_rate`: de 0,5 a 2. `haptic_intensity`: soft, medium o "
-        "strong. `haptic_disabled_events`: solo routeReady, routeFailed y routeFinished; las "
-        "alertas de seguridad no se pueden apagar. Devuelve lo guardado con `updated_at`."
+        "strong. `haptic_disabled_events`: solo routeReady, routeFailed, routeFinished, "
+        "turnLeft y turnRight; las alertas de seguridad no se pueden apagar. Devuelve lo "
+        "guardado con `updated_at`."
     ),
     responses={
         **_SESSION_ERRORS,

@@ -29,6 +29,24 @@ class Settings(BaseSettings):
     ses_sender_email: str | None = None
     aws_region: str = "us-east-1"
 
+    # Narración del entorno (SCRUM-38, ADR-308). «bedrock» llama al VLM con el perfil de
+    # inferencia «us.» (procesamiento solo en EE. UU.); «fake» devuelve un texto fijo para
+    # probar la app sin AWS y solo vale en local; «disabled» responde 503 narration_unavailable.
+    narration_backend: Literal["disabled", "fake", "bedrock"] = "disabled"
+    narration_model_id: str = "us.anthropic.claude-haiku-5-5"
+    # Si Bedrock tarda más, se responde 504: la app descarta lo que llegue más de 4 s
+    # después de capturar la foto.
+    narration_timeout_seconds: float = 4.0
+    # Límite por usuario (en memoria, por proceso, como el resto del rate limiting de ADR-310).
+    narration_min_interval_seconds: float = 3.0
+    narration_daily_limit: int = 1500
+
+    @model_validator(mode="after")
+    def _fake_narration_only_in_local(self) -> Self:
+        if self.narration_backend == "fake" and self.environment != "local":
+            raise ValueError("NARRATION_BACKEND=fake solo se permite con ENVIRONMENT=local.")
+        return self
+
     @model_validator(mode="after")
     def _require_a_sender_for_ses(self) -> Self:
         if self.email_backend == "ses" and not self.ses_sender_email:

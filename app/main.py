@@ -3,7 +3,6 @@ from fastapi import FastAPI
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.modules.contacts.router import router as contacts_router
-from app.modules.narration.router import router as narration_router
 from app.modules.places.router import router as places_router
 from app.modules.sos.router import router as sos_router
 from app.modules.users.router import router as users_router
@@ -25,8 +24,10 @@ def create_app() -> FastAPI:
             {"name": "health", "description": "Estado del servicio."},
             {"name": "users", "description": "Cuentas, autenticación y sesión."},
             {"name": "voice", "description": "Interpretación de comandos de voz."},
-            {"name": "vision-orchestration", "description": "Análisis de frames del entorno."},
-            {"name": "narration", "description": "Generación de narración para el usuario."},
+            {
+                "name": "vision-orchestration",
+                "description": "Narración del entorno: describe una foto con el VLM (ADR-308).",
+            },
             {"name": "places", "description": "Ruta activa e historial de rutas."},
             {"name": "sos", "description": "Botón de emergencia: alerta por correo."},
             {
@@ -45,7 +46,6 @@ def create_app() -> FastAPI:
         users_router,
         voice_router,
         vision_orchestration_router,
-        narration_router,
         places_router,
         contacts_router,
         sos_router,

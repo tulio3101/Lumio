@@ -9,7 +9,6 @@ def test_openapi_exposes_module_contracts(client):
         "/users/login",
         "/voice/commands",
         "/vision/analyze",
-        "/narration",
         "/places/routes/active",
         "/places/routes/history",
     ):

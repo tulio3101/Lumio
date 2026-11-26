@@ -117,6 +117,21 @@ def test_rate_limit_per_user(client, token, describer, limiter):
     assert len(describer.calls) == 1
 
 
+def test_auto_requests_are_throttled_but_the_button_still_works(client, token, describer, limiter):
+    limiter._auto_min_interval = 10.0
+
+    first = analyze(client, token, trigger="auto")
+    second = analyze(client, token, trigger="auto")
+    button = analyze(client, token, trigger="gesture")
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert second.json()["code"] == "narration_rate_limited"
+    # Una automática rechazada no llega al VLM ni gasta cupo del botón.
+    assert button.status_code == 200
+    assert len(describer.calls) == 2
+
+
 def test_logs_only_metadata(client, token, describer, limiter, caplog):
     describer.text = "Hay un letrero que dice Farmacia Central."
 

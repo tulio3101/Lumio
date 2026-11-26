@@ -65,7 +65,12 @@ def describer(client) -> FakeDescriber:
 @pytest.fixture
 def limiter(client) -> NarrationRateLimiter:
     # Sin intervalo mínimo: cada prueba controla el límite que le interesa.
-    instance = NarrationRateLimiter(min_interval_seconds=0, daily_limit=1000)
+    instance = NarrationRateLimiter(
+        min_interval_seconds=0,
+        daily_limit=1000,
+        auto_min_interval_seconds=0,
+        auto_daily_limit=1000,
+    )
     app.dependency_overrides[get_rate_limiter] = lambda: instance
     return instance
 

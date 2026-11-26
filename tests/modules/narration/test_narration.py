@@ -16,6 +16,7 @@ from app.modules.narration.vlm import (
     SceneDescriptionTimeout,
 )
 from app.modules.vision_orchestration.image import jpeg_size
+from app.modules.vision_orchestration.schemas import NarrationTrigger
 from tests.modules.vision_orchestration.conftest import jpeg
 
 # --- Texto -----------------------------------------------------------------------------
@@ -75,6 +76,48 @@ def test_rate_limit_daily_cap_resets_next_day():
     assert not limiter.try_acquire(ana)
     clock.day = date(2026, 11, 26)
     assert limiter.try_acquire(ana)
+
+
+def test_auto_requests_have_their_own_min_interval():
+    clock = Clock()
+    limiter = NarrationRateLimiter(
+        3, 100, clock=lambda: clock.now, today=lambda: clock.day, auto_min_interval_seconds=10
+    )
+    ana = uuid.uuid4()
+
+    assert limiter.try_acquire(ana, NarrationTrigger.AUTO)
+    clock.now = 5.0
+    assert not limiter.try_acquire(ana, NarrationTrigger.AUTO)
+    # El botón sigue con su intervalo de 3 s aunque la automática esté en espera.
+    assert limiter.try_acquire(ana, NarrationTrigger.GESTURE)
+    clock.now = 14.0
+    # Cuenta desde la última narración, sea cual sea su disparo.
+    assert not limiter.try_acquire(ana, NarrationTrigger.AUTO)
+    clock.now = 15.0
+    assert limiter.try_acquire(ana, NarrationTrigger.AUTO)
+
+
+def test_auto_daily_cap_leaves_room_for_the_button():
+    clock = Clock()
+    limiter = NarrationRateLimiter(
+        0,
+        4,
+        clock=lambda: clock.now,
+        today=lambda: clock.day,
+        auto_min_interval_seconds=0,
+        auto_daily_limit=2,
+    )
+    ana = uuid.uuid4()
+
+    assert limiter.try_acquire(ana, NarrationTrigger.AUTO)
+    assert limiter.try_acquire(ana, NarrationTrigger.AUTO)
+    assert not limiter.try_acquire(ana, NarrationTrigger.AUTO)
+    assert limiter.try_acquire(ana, NarrationTrigger.GESTURE)
+    assert limiter.try_acquire(ana, NarrationTrigger.GESTURE)
+    # El tope total (4) también corta al botón.
+    assert not limiter.try_acquire(ana, NarrationTrigger.GESTURE)
+    clock.day = date(2026, 11, 26)
+    assert limiter.try_acquire(ana, NarrationTrigger.AUTO)
 
 
 # --- JPEG --------------------------------------------------------------------------------

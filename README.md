@@ -109,8 +109,16 @@ alerta: un riesgo nunca viene de la red, lo decide el loop de seguridad del tel�
 
 Errores: 401 `invalid_session`, 403 `consent_required`, 413 `image_too_large`, 422
 `invalid_image` (o un campo inválido), 429 `narration_rate_limited` (1 cada 3 s y 1.500 al día
-por usuario, en memoria), 503 `narration_unavailable` (Bedrock falló, está saturado o la
+por usuario, en memoria; las automáticas, 1 cada 10 s y 1.200 al día, ver abajo), 503 `narration_unavailable` (Bedrock falló, está saturado o la
 narración no está configurada), 504 `narration_timeout` (más de 4 s).
+
+**Solicitudes consecutivas (SCRUM-40).** La app pide una descripción sola cuando la escena cambia
+(`trigger=auto`) y el backend las trata aparte para controlar costo y datos: 1 cada 10 s y 1.200
+al día por usuario (`NARRATION_AUTO_MIN_INTERVAL_SECONDS`, `NARRATION_AUTO_DAILY_LIMIT`). El
+intervalo cuenta desde la última narración del usuario, sea de botón o automática, y las 300 del
+día que sobran del tope de 1.500 quedan para «Describir entorno», que siempre conserva su
+intervalo de 3 s. Una automática rechazada responde 429 sin llamar al VLM; la app la ignora sin
+avisar al usuario y espera antes de volver a intentar.
 
 **Privacidad.** La foto solo vive en memoria durante la solicitud: no se escribe en disco, base
 de datos ni S3, y Caddy limita `/vision/*` a 1100 KB para que el cuerpo nunca se pase a disco.

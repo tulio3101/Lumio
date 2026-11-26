@@ -11,6 +11,9 @@ from app.core.security import create_token, decode_token, hash_password, verify_
 from app.modules.users import repository
 from app.modules.users.exceptions import (
     AccountDeletionError,
+    GoogleAccountConflictError,
+    GoogleEmailNotVerifiedError,
+    GoogleSignInError,
     InvalidCurrentPasswordError,
     PasswordChangeError,
     PasswordNotSetError,
@@ -18,6 +21,7 @@ from app.modules.users.exceptions import (
     PreferencesUpdateError,
     ProfileUpdateError,
 )
+from app.modules.users.google_auth import GoogleIdentity
 from app.modules.users.models import AuthSession, User
 from app.modules.users.schemas import (
     PasswordChange,
@@ -86,6 +90,41 @@ def login(db: Session, payload: UserLogin) -> TokenPair:
     if user is None or password_hash is None or not password_ok:
         raise InvalidCredentials
     return issue_tokens(db, user)
+
+
+def login_google(db: Session, identity: GoogleIdentity) -> tuple[TokenPair, bool]:
+    """Inicia sesión con una identidad de Google ya verificada; crea la cuenta si no existe.
+
+    Devuelve el TokenPair y si la cuenta se acaba de crear. La cuenta se identifica por
+    ``sub`` (estable), no por el correo, que en Google puede cambiar. Un correo que ya es de
+    una cuenta con contraseña no se vincula solo (GoogleAccountConflictError).
+    """
+    user = repository.get_by_google_sub(db, identity.sub)
+    if user is not None:
+        return issue_tokens(db, user), False
+    if not identity.email or not identity.email_verified:
+        raise GoogleEmailNotVerifiedError()
+    email = normalize_email(identity.email)
+    if repository.get_by_email(db, email) is not None:
+        raise GoogleAccountConflictError()
+    try:
+        user = repository.create_google_user(db, email, identity.sub)
+    except IntegrityError:
+        # Otra petición creó la cuenta (mismo sub) o tomó el correo al mismo tiempo.
+        db.rollback()
+        user = repository.get_by_google_sub(db, identity.sub)
+        if user is None:
+            raise GoogleAccountConflictError() from None
+        return issue_tokens(db, user), False
+    except OperationalError:
+        db.rollback()
+        raise
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("No se pudo crear la cuenta de Google")
+        raise GoogleSignInError() from exc
+    logger.info("Cuenta %s creada con Google", user.id)
+    return issue_tokens(db, user), True
 
 
 def resolve_session(db: Session, token: str, token_type: str) -> AuthSession:

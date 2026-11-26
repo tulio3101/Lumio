@@ -1,8 +1,8 @@
 from functools import lru_cache
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
-from pydantic import model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Valor de ejemplo del repo (público): nunca debe firmar tokens fuera de local.
 INSECURE_JWT_SECRET = "change-me"
@@ -22,6 +22,17 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 15
     refresh_token_days: int = 30
+
+    # Iniciar sesión con Google: client ID de OAuth de las apps (iOS, y web si la hay)
+    # separados por comas. Solo se aceptan ID tokens emitidos para ellos. Vacío: 503.
+    google_client_ids: Annotated[list[str], NoDecode] = []
+
+    @field_validator("google_client_ids", mode="before")
+    @classmethod
+    def _split_client_ids(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [part.strip() for part in value.split(",") if part.strip()]
+        return value
 
     # Correo (alertas de emergencia). «log» solo escribe el correo en los logs y únicamente
     # sirve en local; en dev y prod hay que usar «ses» (ADR-310).

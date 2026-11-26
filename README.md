@@ -29,6 +29,7 @@ uvicorn app.main:app --reload
 
 | Método | Ruta | Uso |
 |---|---|---|
+| `POST` | `/users/login/google` | Iniciar sesión o crear cuenta con Google: `{"id_token"}` del SDK de Google. Se verifica firma, emisor, vigencia y audiencia (`GOOGLE_CLIENT_IDS`). La cuenta se reconoce por el `sub` de Google; si no existe se crea sin contraseña con el correo verificado. 200 o 201 (cuenta nueva) con el `TokenPair`. 401 `invalid_google_token` o `google_email_not_verified`, 409 `google_account_conflict` (el correo ya es de una cuenta con contraseña: no se vincula sola, porque el registro con correo no verifica el correo), 500 `google_sign_in_failed`, 503 `google_auth_unavailable` (sin configurar o sin acceso a las llaves de Google) |
 | `POST` | `/users/password-reset` | Recuperar Contraseña: `{"email"}`. Si es de una cuenta con contraseña propia, envía un código de 6 dígitos por correo (vence en 15 min, 5 intentos, solo vale el último, un pedido por minuto). Responde siempre 202 con el mismo mensaje, exista o no la cuenta (las cuentas solo Google no reciben código). 500 `password_reset_failed`, 503 |
 | `POST` | `/users/password-reset/confirm` | `{"email", "code", "new_password"}` (8–128). 204; se cierran las sesiones de todos los dispositivos y se inicia sesión con la nueva. 400 `invalid_reset_code` (incorrecto, vencido, agotado o correo sin cuenta: misma respuesta), 422, 500 `password_reset_failed`, 503 |
 | `GET` | `/users/me` | Cuenta del usuario: `email`, `display_name` y `phone` (los dos últimos pueden ser `null`) |

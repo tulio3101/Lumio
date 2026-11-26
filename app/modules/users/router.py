@@ -1,12 +1,18 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Response, status
 
 from app.core.db import DbSession
 from app.core.errors import ErrorResponse
 from app.modules.sos.email import EmailSenderDep
 from app.modules.users import password_reset, service
 from app.modules.users.dependencies import CurrentSession, CurrentUser
+from app.modules.users.exceptions import GoogleAuthUnavailableError, InvalidGoogleTokenError
+from app.modules.users.google_auth import (
+    GoogleAuthUnavailable,
+    GoogleVerifierDep,
+    InvalidGoogleToken,
+)
 from app.modules.users.schemas import (
     GoogleAuthRequest,
     PasswordChange,
@@ -24,10 +30,6 @@ from app.modules.users.schemas import (
 )
 
 router = APIRouter(prefix="/users", tags=["users"])
-
-NOT_IMPLEMENTED = HTTPException(
-    status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="No implementado"
-)
 
 
 @router.post(
@@ -61,9 +63,58 @@ def login(payload: UserLogin, db: DbSession) -> TokenPair:
         ) from None
 
 
-@router.post("/login/google", response_model=TokenPair, summary="Iniciar sesión con Google")
-def login_google(payload: GoogleAuthRequest) -> TokenPair:
-    raise NOT_IMPLEMENTED
+@router.post(
+    "/login/google",
+    response_model=TokenPair,
+    summary="Iniciar sesión o crear cuenta con Google",
+    description=(
+        "Recibe el ID token que el SDK de Google entregó a la app. El backend verifica firma, "
+        "emisor, vigencia y que sea para un client ID de Lumio (`GOOGLE_CLIENT_IDS`). La "
+        "cuenta se reconoce por el identificador de Google; si no existe se crea sin "
+        "contraseña con el correo verificado (201). Si ese correo ya es de una cuenta con "
+        "contraseña no se vincula: hay que entrar con la contraseña (409)."
+    ),
+    responses={
+        status.HTTP_201_CREATED: {"model": TokenPair, "description": "Cuenta nueva creada."},
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorResponse,
+            "description": (
+                "Token inválido, vencido o de otra app (`invalid_google_token`), o cuenta de "
+                "Google sin correo verificado (`google_email_not_verified`)."
+            ),
+        },
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorResponse,
+            "description": (
+                "El correo ya es de una cuenta con contraseña (`google_account_conflict`)."
+            ),
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "model": ErrorResponse,
+            "description": "No se pudo crear la cuenta (`google_sign_in_failed`).",
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "model": ErrorResponse,
+            "description": (
+                "Google sin configurar o inalcanzable (`google_auth_unavailable`), o "
+                "persistencia no disponible."
+            ),
+        },
+    },
+)
+def login_google(
+    payload: GoogleAuthRequest, db: DbSession, verifier: GoogleVerifierDep, response: Response
+) -> TokenPair:
+    try:
+        identity = verifier.verify(payload.id_token)
+    except InvalidGoogleToken:
+        raise InvalidGoogleTokenError() from None
+    except GoogleAuthUnavailable:
+        raise GoogleAuthUnavailableError() from None
+    tokens, created = service.login_google(db, identity)
+    if created:
+        response.status_code = status.HTTP_201_CREATED
+    return tokens
 
 
 @router.post(

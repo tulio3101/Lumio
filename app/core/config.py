@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     # Correo (alertas de emergencia). «log» solo escribe el correo en los logs y únicamente
     # sirve en local; en dev y prod hay que usar «ses» (ADR-310).
     email_backend: Literal["log", "ses"] = "log"
+    # URL pública de la API: los enlaces de la ubicación compartida (SCRUM-25) apuntan aquí.
+    public_base_url: str = "http://localhost:8000"
     ses_sender_email: str | None = None
     aws_region: str = "us-east-1"
 

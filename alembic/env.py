@@ -6,6 +6,7 @@ from alembic import context
 from app.core.config import get_settings
 from app.core.db import Base
 from app.modules.contacts import models as contacts_models  # noqa: F401  (registra tablas en Base.metadata)
+from app.modules.location_sharing import models as location_sharing_models  # noqa: F401  (registra tablas en Base.metadata)
 from app.modules.places import models as places_models  # noqa: F401  (registra tablas en Base.metadata)
 from app.modules.sos import models as sos_models  # noqa: F401  (registra tablas en Base.metadata)
 from app.modules.users import models as users_models  # noqa: F401  (registra tablas en Base.metadata)

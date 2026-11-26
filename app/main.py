@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.modules.contacts.router import router as contacts_router
+from app.modules.location_sharing.router import router as location_sharing_router
 from app.modules.places.router import router as places_router
 from app.modules.sos.router import router as sos_router
 from app.modules.users.router import router as users_router
@@ -49,6 +50,7 @@ def create_app() -> FastAPI:
         places_router,
         contacts_router,
         sos_router,
+        location_sharing_router,
     ):
         app.include_router(router)
 

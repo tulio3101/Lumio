@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Responsable (Jira) | Néstor López |
-| Estado Jira | En revisión |
+| Estado Jira | Finalizado |
 | Repositorios | `LumioFrontend` y `Lumio` (respaldo en el backend) |
 | Commits | 4 (2026-11-24 → 2026-11-25); `5a7d643` y `046079c` se comparten con SCRUM-27 |
 
@@ -76,7 +76,7 @@ casos de háptica y actualiza docs/HU-preferencias-hapticas.md con la sección d
 - `swift test` pasa HapticPreferencesTests y PreferencesSyncTests.
 - En el iPhone sin mirar: crear ruta = dos toques; finalizarla = tres que suben. Con la vibración
   apagada, una alerta de obstáculo igual vibra.
-- La HU sigue En revisión; el doc deja compilación y pruebas pendientes de CI.
+- Compilación de Xcode y `swift test` en verde en el CI de develop.
 
 ## Commits cubiertos
 

@@ -3,9 +3,9 @@
 | | |
 |---|---|
 | Responsable (Jira) | Samuel Gil |
-| Estado Jira | Por hacer (hay commit con la implementación) |
+| Estado Jira | Finalizado |
 | Repositorio | `LumioFrontend` |
-| Commits | 1 (2026-10-27); ajustes posteriores dentro de SCRUM-33 (`6cc4bb3`, `944435d`) |
+| Commits | 3 (2026-10-27 → 2026-11-26); ajustes intermedios dentro de SCRUM-33 (`6cc4bb3`, `944435d`) |
 
 > Prompts reconstruidos a partir de los commits y de la HU en Jira; no son el historial literal del chat.
 
@@ -45,15 +45,36 @@ activa, y adáptalo al contrato nuevo del frame. Su aviso va en el contexto de a
 cancela al detener la detección.
 ```
 
+### Prompt 3 · Luz de ARKit en lugar del plano Y (commit `971cbd5`)
+
+```text
+Muestrear el plano Y retiene el IOSurface del frame y contribuye a «ARSession is retaining N
+ARFrames». Cambia la API a analyze(ambientIntensity:) con ARFrame.lightEstimate.ambientIntensity
+leído como Float dentro del delegado, antes de la compuerta del detector. Umbral en lux:
+alertThreshold = 100 y hysteresisMargin = 40 (se recupera a 140). La recuperación se confirma
+por audio como P3. Actualiza LowLightDetectorTests.
+```
+
+### Prompt 4 · Pasar por el catálogo y el motor háptico (commit `0743cc9`, SCRUM-31)
+
+```text
+LowLightDetector todavía usa su propio UINotificationFeedbackGenerator. Haz que reciba el motor
+háptico y emita por FeedbackCatalog: lowLight (P1, patrón warning, que vibra siempre) y
+lowLightRecovered (P3, sin vibrar). Así respeta las preferencias hápticas y deja de depender de
+UIKit. Pruébalo en FeedbackMatrixTests.
+```
+
 ## Verificación final
 
 - `swift test` pasa LowLightDetectorTests.
 - En el iPhone: tapar la cámara durante una ruta produce un aviso; destaparla produce un aviso de
   recuperación, sin repetirse.
-- **Pendiente:** mover la HU en Jira (sigue en Por hacer) y validar el umbral 0,15 en campo.
+- `swift test --filter FeedbackMatrixTests` cubre la alerta, la histéresis y la vibración por el motor háptico.
 
 ## Commits cubiertos
 
 | Commit | Fecha | Mensaje |
 |---|---|---|
 | `694ded1` | 2026-10-27 | SCRUM-36: Detectar poca luz y avisar al usuario |
+| `971cbd5` | 2026-11-25 | feat: integracion develop, desniveles y mesas, SCRUM-320/36/360/321/31 |
+| `0743cc9` | 2026-11-26 | SCRUM-31: retroalimentación del sistema por FeedbackCatalog |

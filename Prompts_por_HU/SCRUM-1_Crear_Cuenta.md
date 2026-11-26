@@ -95,8 +95,9 @@ conexión y error del servidor con su propio mensaje.
 
 - `pytest -rs` con `TEST_DATABASE_URL` pasa las pruebas de registro.
 - Con VoiceOver se puede crear una cuenta sin mirar y se oyen los errores de cada campo.
-- **Pendiente según Jira:** registro con Google (subtarea SCRUM-68). El backend responde 501 y no
-  hay commits que lo implementen.
+- El registro con Google se hizo junto con el inicio de sesión: `POST /users/login/google` crea la
+  cuenta la primera vez (ver [SCRUM-2](SCRUM-2_Iniciar_Sesion.md), commits `4bd4f1f` y `87830ea`).
+  La subtarea SCRUM-68 sigue en *Por hacer* en Jira.
 
 ## Commits cubiertos
 

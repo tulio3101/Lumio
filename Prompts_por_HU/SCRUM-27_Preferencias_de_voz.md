@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Responsable (Jira) | Néstor López |
-| Estado Jira | En revisión |
+| Estado Jira | Finalizado |
 | Repositorios | `LumioFrontend` y `Lumio` (respaldo en el backend) |
 | Commits | 4 (2026-11-24 → 2026-11-25); los dos últimos se comparten con SCRUM-28 |
 
@@ -103,7 +103,7 @@ actualiza los dos docs de HU.
 - `swift test` pasa VoicePreferencesTests y PreferencesSyncTests; `pytest -rs` pasa las de preferencias.
 - En el iPhone: subir la velocidad a 1,5 cambia también las indicaciones y alertas; cerrar y abrir
   conserva la configuración.
-- El doc indica compilación y pruebas pendientes de CI al momento del commit; la HU sigue En revisión.
+- Compilación de Xcode y `swift test` en verde en el CI de develop.
 
 ## Commits cubiertos
 

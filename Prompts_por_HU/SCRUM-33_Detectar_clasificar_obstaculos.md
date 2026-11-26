@@ -154,6 +154,18 @@ iOS, y un test usa APIs de iOS. Protégelos con #if os(iOS) / canImport sin camb
 comportamiento en el iPhone. En ObstacleAnnouncerTests cambia a let el anunciador que no se muta.
 ```
 
+### Prompt extra · Desniveles con perfil de profundidad (commits `dba7322` y `971cbd5`)
+
+```text
+Agrega la detección de desniveles con el perfil de profundidad delante del usuario:
+ElevationProfileSampler toma muestras del LiDAR en el corredor, ElevationProfileAnalyzer detecta
+bajadas (peligro, patrón danger con 3 impactos fuertes) y subidas (aviso, patrón warning) y
+ElevationAudio arma el texto P1. Persistencia más estricta que la de objetos (5 de 7 frames) y
+cooldown por tipo de peligro en DetectionFocusConfig. Sin profundidad no se detectan desniveles y
+se dice una sola vez. Agrega un panel de depuración (DebugSafetyView, SafetyDebugFrame) para
+calibrar en la calle, solo en Debug. Pruebas en ElevationProfileAnalyzerTests.
+```
+
 ## Verificación final
 
 - `swift test` pasa las pruebas de Safety en Linux y macOS; el loop no importa red.
@@ -186,5 +198,7 @@ comportamiento en el iPhone. En ObstacleAnnouncerTests cambia a let el anunciado
 | `944435d` | 2026-11-19 | SCRUM-33: wip exteriores, profundidad y desniveles |
 | `167888c` | 2026-11-19 | fix(ci): compilacion portable (magicTap, guard de tests y @main en SwiftPM) |
 | `831b085` | 2026-11-25 | test: use let for unmutated announcer |
+| `dba7322` | 2026-11-25 | feat(desniveles): instrumentacion de debug y calibracion |
+| `971cbd5` | 2026-11-25 | feat: integracion develop, desniveles y mesas, SCRUM-320/36/360/321/31 |
 
 El permiso de cámara con el flujo accesible (`995618d`) está en [SCRUM-315](SCRUM-315_Permisos_accesibles.md).

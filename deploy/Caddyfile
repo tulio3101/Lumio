@@ -1,0 +1,12 @@
+{$API_DOMAIN} {
+          encode gzip
+          # Narración (ADR-308): la foto pesa como mucho 1 MB. Con este tope el cuerpo nunca
+          # se escribe a disco en el servidor (Starlette guarda en memoria hasta 1 MB).
+          request_body /vision/* {
+                  max_size 1100KB
+          }
+          request_body {
+                  max_size 10MB
+          }
+          reverse_proxy api:8000
+}

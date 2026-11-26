@@ -1,0 +1,56 @@
+# Entorno desplegado en AWS. Lo usa deploy/deploy.sh dentro de la EC2; no es para uso local.
+# Las variables (${...}) salen del archivo .env que genera deploy.sh.
+services:
+  api:
+    image: ${API_IMAGE:?falta API_IMAGE}
+    env_file: .env
+    command:
+      - uvicorn
+      - app.main:app
+      - --host=0.0.0.0
+      - --port=8000
+      - --workers=2
+      - --proxy-headers
+      - --forwarded-allow-ips=*
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION}
+        awslogs-group: ${LOG_GROUP}
+        awslogs-stream: api
+
+  caddy:
+    image: caddy:2.11
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION}
+        awslogs-group: ${LOG_GROUP}
+        awslogs-stream: caddy
+
+volumes:
+  caddy-data: # aquí Caddy guarda el certificado; sobrevive a los despliegues
+  caddy-config:

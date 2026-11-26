@@ -1,0 +1,506 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Lumio - entorno dev (ADR-310, SCRUM-318)
+
+Parameters:
+  EnvName:
+    Type: String
+    Default: dev
+
+  AmiId:
+    Type: AWS::EC2::Image::Id
+    Default: ami-0951c836c26e34fc8 # Amazon Linux 2023 arm64, 2026-10-30
+
+  GitHubRepo:
+    Type: String
+    Default: tulio3101/Lumio
+  DeployBranch:
+    Type: String
+    Default: develop
+  AlertEmail:
+    Type: String
+    Description: Correo que recibe las alarmas
+
+  NarrationModelId:
+    Type: String
+    Default: anthropic.claude-haiku-5-5
+    Description: >-
+      Modelo base del VLM de la narración (ADR-308), sin el prefijo «us.». La API lo invoca por el
+      perfil de inferencia «us.<modelo>», que enruta entre us-east-1, us-east-2 y us-west-2.
+
+  GitHubRepoImmutable:
+    Type: String
+    Default: tulio3101@113718204/Lumio@1373109629
+    Description: Dueño y repo con sus IDs numéricos (formato immutable subject de GitHub OIDC)
+
+Resources:
+  # ---------- Red ----------
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.20.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub lumio-${EnvName}-vpc
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub lumio-${EnvName}-igw
+
+  VpcGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.0.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: false # la EC2 usará una Elastic IP fija
+      Tags:
+        - Key: Name
+          Value: !Sub lumio-${EnvName}-public-a
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.10.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub lumio-${EnvName}-private-a
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.11.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: !Sub lumio-${EnvName}-private-b
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub lumio-${EnvName}-public-rt
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+  # Las subredes privadas usan la tabla principal de la VPC: solo tráfico interno.
+
+  # ---------- Security groups ----------
+  ApiSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Lumio API - HTTP/HTTPS publico, sin SSH
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - Description: HTTPS desde internet
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - Description: HTTP para el reto de Lets Encrypt y redireccion a HTTPS
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub lumio-${EnvName}-sg-api
+
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Lumio RDS - PostgreSQL solo desde la API
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - Description: PostgreSQL desde la EC2 de la API
+          IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref ApiSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub lumio-${EnvName}-sg-db
+
+  # ---------- Base de datos ----------
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subredes privadas de Lumio para RDS
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+
+  Database:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub lumio-${EnvName}
+      Engine: postgres
+      EngineVersion: "16.13"
+      DBInstanceClass: db.t4g.micro
+      AllocatedStorage: "20"
+      StorageType: gp3
+      StorageEncrypted: true
+      DBName: lumio
+      MasterUsername: lumio
+      MasterUserPassword: !Sub "{{resolve:ssm-secure:/lumio/${EnvName}/DB_PASSWORD}}"
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DbSecurityGroup
+      PubliclyAccessible: false
+      MultiAZ: false
+      BackupRetentionPeriod: 7
+      PreferredBackupWindow: "07:00-08:00" # 2-3 a.m. hora Colombia
+      PreferredMaintenanceWindow: "sun:08:00-sun:09:00"
+      AutoMinorVersionUpgrade: true
+      CopyTagsToSnapshot: true
+      DeletionProtection: true
+
+  # ---------- Imágenes y logs ----------
+  EcrRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: lumio-api
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      EmptyOnDelete: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Conservar solo las ultimas 5 imagenes",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
+                },
+                "action": { "type": "expire" }
+              }
+            ]
+          }
+
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /lumio/${EnvName}/api
+      RetentionInDays: 14
+
+  # ---------- EC2 de la API ----------
+  ApiInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub lumio-api-ec2-${EnvName}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+      Policies:
+        - PolicyName: lumio-api-runtime
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: LeerSecretosDelEntorno
+                Effect: Allow
+                Action:
+                  - ssm:GetParametersByPath
+                  - ssm:GetParameters
+                  - ssm:GetParameter
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/lumio/${EnvName}
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/lumio/${EnvName}/*
+              - Sid: EnviarAlertasDeEmergenciaPorCorreo
+                Effect: Allow
+                Action:
+                  - ses:SendEmail
+                Resource: !Sub arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/*
+              - Sid: DescribirElEntornoConBedrock
+                Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource:
+                  - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.${NarrationModelId}
+                  - !Sub arn:${AWS::Partition}:bedrock:us-east-1::foundation-model/${NarrationModelId}
+                  - !Sub arn:${AWS::Partition}:bedrock:us-east-2::foundation-model/${NarrationModelId}
+                  - !Sub arn:${AWS::Partition}:bedrock:us-west-2::foundation-model/${NarrationModelId}
+              - Sid: EscribirLogsDeLaApi
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${ApiLogGroup}:*
+
+  ApiInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref ApiInstanceRole
+
+  ApiEip:
+    Type: AWS::EC2::EIP
+    DependsOn: VpcGatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub lumio-${EnvName}-api-eip
+
+  ApiInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: t4g.small
+      IamInstanceProfile: !Ref ApiInstanceProfile
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref ApiSecurityGroup
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+        HttpPutResponseHopLimit: 2
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      PropagateTagsToVolumeOnCreation: true
+      Tags:
+        - Key: Name
+          Value: !Sub lumio-${EnvName}-api
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+
+          # 1. Esperar la Elastic IP: sin ella la máquina no tiene salida a internet.
+          imds() {
+            TOKEN=$(curl -sf -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+            curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" "http://169.254.169.254/latest/meta-data/$1" || true
+          }
+          for i in $(seq 1 120); do
+            [ "$(imds public-ipv4)" = "${ApiEip}" ] && break
+            sleep 5
+          done
+
+          # 2. Docker y el plugin de Compose (versión fija y checksum verificado).
+          dnf install -y docker
+          systemctl enable --now docker
+          COMPOSE_VERSION=v5.6.1
+          mkdir -p /usr/local/lib/docker/cli-plugins
+          cd /tmp
+          curl -fsSLO https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-aarch64
+          curl -fsSLO https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-aarch64.sha256
+          sha256sum -c docker-compose-linux-aarch64.sha256
+          install -m 0755 docker-compose-linux-aarch64 /usr/local/lib/docker/cli-plugins/docker-compose
+          docker compose version
+
+          # 3. Datos de la infraestructura para el despliegue (no son secretos).
+          mkdir -p /opt/lumio
+          cat > /opt/lumio/infra.env <<EOF
+          AWS_REGION=${AWS::Region}
+          ENV_NAME=${EnvName}
+          ECR_REPOSITORY_URI=${EcrRepository.RepositoryUri}
+          DB_HOST=${Database.Endpoint.Address}
+          API_DOMAIN=${ApiEip}.sslip.io
+          LOG_GROUP=${ApiLogGroup}
+          EOF
+
+  ApiEipAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt ApiEip.AllocationId
+      InstanceId: !Ref ApiInstance
+
+  # ---------- CI/CD: GitHub Actions con OIDC ----------
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub lumio-github-deploy-${EnvName}
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOidcProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub:
+                  - !Sub repo:${GitHubRepoImmutable}:ref:refs/heads/${DeployBranch}
+                  - !Sub repo:${GitHubRepo}:ref:refs/heads/${DeployBranch}
+      Policies:
+        - PolicyName: lumio-deploy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: EcrLogin
+                Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Sid: EcrPushSoloLumioApi
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                  - ecr:BatchGetImage
+                  - ecr:DescribeImages
+                Resource: !GetAtt EcrRepository.Arn
+              - Sid: DesplegarSoloEnLaEc2DeLumio
+                Effect: Allow
+                Action: ssm:SendCommand
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}::document/AWS-RunShellScript
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${ApiInstance}
+              - Sid: LeerResultadoDelDespliegue
+                Effect: Allow
+                Action:
+                  - ssm:GetCommandInvocation
+                  - ssm:ListCommandInvocations
+                Resource: "*"
+
+  # ---------- Alarmas ----------
+  AlertsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub lumio-${EnvName}-alertas
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref AlertEmail
+
+  ApiStatusCheckAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub lumio-${EnvName}-ec2-status-check
+      AlarmDescription: La EC2 de la API fallo un status check
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref ApiInstance
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions: [!Ref AlertsTopic]
+      OKActions: [!Ref AlertsTopic]
+
+  ApiCpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub lumio-${EnvName}-ec2-cpu
+      AlarmDescription: CPU de la EC2 de la API sobre 80 % por 15 minutos
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref ApiInstance
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions: [!Ref AlertsTopic]
+      OKActions: [!Ref AlertsTopic]
+
+  ApiErrorMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref ApiLogGroup
+      FilterPattern: '?ERROR ?Traceback ?"Internal Server Error" ?"Service Unavailable"'
+      MetricTransformations:
+        - MetricNamespace: Lumio
+          MetricName: !Sub ApiErrors-${EnvName}
+          MetricValue: "1"
+          DefaultValue: 0
+
+  ApiErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub lumio-${EnvName}-api-errors
+      AlarmDescription: El backend registro errores en los ultimos 5 minutos
+      Namespace: Lumio
+      MetricName: !Sub ApiErrors-${EnvName}
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertsTopic]
+
+Outputs:
+  VpcId:
+    Value: !Ref Vpc
+  PublicSubnetId:
+    Value: !Ref PublicSubnet
+  PrivateSubnetIds:
+    Value: !Join [",", [!Ref PrivateSubnetA, !Ref PrivateSubnetB]]
+  ApiSecurityGroupId:
+    Value: !Ref ApiSecurityGroup
+  DbSecurityGroupId:
+    Value: !Ref DbSecurityGroup
+  DbEndpoint:
+    Value: !GetAtt Database.Endpoint.Address
+  EcrRepositoryUri:
+    Value: !GetAtt EcrRepository.RepositoryUri
+  ApiLogGroupName:
+    Value: !Ref ApiLogGroup
+  ApiInstanceId:
+    Value: !Ref ApiInstance
+  ApiPublicIp:
+    Value: !Ref ApiEip
+  ApiUrl:
+    Value: !Sub https://${ApiEip}.sslip.io
+  GitHubDeployRoleArn:
+    Value: !GetAtt GitHubDeployRole.Arn

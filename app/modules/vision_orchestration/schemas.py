@@ -22,6 +22,15 @@ class FrameSubmission(BaseModel):
     captured_at: datetime
     location: GeoPoint | None = None
     consent_given: bool = Field(description="El usuario consintió el envío de imágenes.")
+    consent_version: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=32,
+        description=(
+            "Versión del aviso de privacidad que aceptó el usuario (SCRUM-324). Sin ella la "
+            "solicitud se rechaza con 403 `consent_required`."
+        ),
+    )
 
 
 class DetectedObject(BaseModel):

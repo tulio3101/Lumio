@@ -38,6 +38,7 @@ ENVIRONMENT=$ENV_NAME
 DEBUG=false
 DATABASE_URL=postgresql+psycopg://lumio:$DB_PASSWORD@$DB_HOST:5432/lumio
 JWT_SECRET=$JWT_SECRET
+PUBLIC_BASE_URL=https://$API_DOMAIN
 EOF
 if [ -n "$SES_SENDER_EMAIL" ]; then
   {

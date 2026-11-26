@@ -20,6 +20,13 @@ Parameters:
     Type: String
     Description: Correo que recibe las alarmas
 
+  NarrationModelId:
+    Type: String
+    Default: anthropic.claude-haiku-5-5
+    Description: >-
+      Modelo base del VLM de la narración (ADR-308), sin el prefijo «us.». La API lo invoca por el
+      perfil de inferencia «us.<modelo>», que enruta entre us-east-1, us-east-2 y us-west-2.
+
   GitHubRepoImmutable:
     Type: String
     Default: tulio3101@113718204/Lumio@1373109629
@@ -242,6 +249,16 @@ Resources:
                 Action:
                   - ses:SendEmail
                 Resource: !Sub arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/*
+              - Sid: DescribirElEntornoConBedrock
+                Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource:
+                  - !Sub arn:${AWS::Partition}:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/us.${NarrationModelId}
+                  - !Sub arn:${AWS::Partition}:bedrock:us-east-1::foundation-model/${NarrationModelId}
+                  - !Sub arn:${AWS::Partition}:bedrock:us-east-2::foundation-model/${NarrationModelId}
+                  - !Sub arn:${AWS::Partition}:bedrock:us-west-2::foundation-model/${NarrationModelId}
               - Sid: EscribirLogsDeLaApi
                 Effect: Allow
                 Action:

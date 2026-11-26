@@ -89,6 +89,46 @@ SPF, DMARC), crear el parámetro `SES_SENDER_EMAIL`, aplicar el stack de CloudFo
 el permiso a la EC2 y **pedir la salida del sandbox de SES**: en sandbox solo se envía a
 direcciones verificadas y los contactos no lo estarán.
 
+## Narración del entorno
+
+Describe con un VLM lo que el usuario tiene delante (SCRUM-38, ADR-308). `POST /vision/analyze`
+exige `Authorization: Bearer <access_token>` y recibe `multipart/form-data`:
+
+| Campo | Uso |
+|---|---|
+| `image` | Foto JPEG, ≤ 1 MB y ≤ 1024 px de lado largo. La app envía 768 px, calidad 0,7, sin EXIF ni GPS |
+| `captured_at` | Hora de la captura (ISO 8601); la app descarta lo que llega más de 4 s después |
+| `trigger` | `gesture` (por defecto) o `auto`; solo para métricas de uso y costo |
+| `consent_version` | Versión del aviso aceptado (SCRUM-324). Sin ella: 403 `consent_required`, sin mirar la foto |
+| `language` | `es` (por defecto) |
+
+Respuesta 200: `{"text", "model", "latency_ms"}`. La app locuta `text` como P3. No hay nivel de
+alerta: un riesgo nunca viene de la red, lo decide el loop de seguridad del teléfono.
+
+Errores: 401 `invalid_session`, 403 `consent_required`, 413 `image_too_large`, 422
+`invalid_image` (o un campo inválido), 429 `narration_rate_limited` (1 cada 3 s y 1.500 al día
+por usuario, en memoria), 503 `narration_unavailable` (Bedrock falló, está saturado o la
+narración no está configurada), 504 `narration_timeout` (más de 4 s).
+
+**Privacidad.** La foto solo vive en memoria durante la solicitud: no se escribe en disco, base
+de datos ni S3, y Caddy limita `/vision/*` a 1100 KB para que el cuerpo nunca se pase a disco.
+Los logs guardan solo metadatos (modelo, bytes, tokens, latencia); nunca la foto ni el texto. El
+prompt de sistema (`app/modules/narration/prompt.py`) prohíbe dar metros, decir que el camino
+es seguro y describir a las personas.
+
+Configuración: `NARRATION_BACKEND` (`disabled`, `fake` o `bedrock`), `NARRATION_MODEL_ID` (por
+defecto `us.anthropic.claude-haiku-5-5`, perfil de inferencia `us.`: solo EE. UU.) y
+`NARRATION_TIMEOUT_SECONDS` (4). `fake` devuelve un texto fijo para probar la app sin AWS y
+solo vale con `ENVIRONMENT=local`. `deploy.sh` activa Bedrock si existe el parámetro
+`/lumio/<env>/NARRATION_MODEL_ID`.
+
+**Pendiente fuera del código** (ADR-308): habilitar el acceso al modelo en la consola de
+Bedrock (formulario de caso de uso de Anthropic), aplicar el stack para dar
+`bedrock:InvokeModel` a la EC2, crear el parámetro `NARRATION_MODEL_ID`, verificar que el
+*model invocation logging* siga apagado (`aws bedrock get-model-invocation-logging-configuration`),
+crear la alarma de AWS Budgets para Bedrock en US$8/mes y revisar las cuotas del modelo. El
+ADR sigue «Propuesto» hasta tener el benchmark; el modelo se cambia sin desplegar código.
+
 ## Rutas
 
 Todos los endpoints de `/places` exigen `Authorization: Bearer <access_token>` (el de

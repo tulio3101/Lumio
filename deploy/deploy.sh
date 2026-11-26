@@ -20,6 +20,9 @@ DB_PASSWORD="$(param DB_PASSWORD)"
 # Remitente verificado en SES para las alertas de emergencia. Es opcional: sin este parámetro la
 # API despliega igual, pero el envío de alertas falla con un error claro (no finge enviar).
 SES_SENDER_EMAIL="$(param SES_SENDER_EMAIL 2>/dev/null || true)"
+# Modelo de Bedrock para la narración del entorno (ADR-308), p. ej.
+# us.anthropic.claude-haiku-5-5. Opcional: sin él la narración responde 503 narration_unavailable.
+NARRATION_MODEL_ID="$(param NARRATION_MODEL_ID 2>/dev/null || true)"
 
 # 2. Archivo .env para Compose, legible solo por root.
 umask 077
@@ -37,6 +40,13 @@ if [ -n "$SES_SENDER_EMAIL" ]; then
   {
     echo "EMAIL_BACKEND=ses"
     echo "SES_SENDER_EMAIL=$SES_SENDER_EMAIL"
+  } >> .env
+fi
+
+if [ -n "$NARRATION_MODEL_ID" ]; then
+  {
+    echo "NARRATION_BACKEND=bedrock"
+    echo "NARRATION_MODEL_ID=$NARRATION_MODEL_ID"
   } >> .env
 fi
 

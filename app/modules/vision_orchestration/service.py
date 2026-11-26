@@ -55,7 +55,7 @@ def describe_scene(
     limiter: NarrationRateLimiter,
 ) -> VisionAnalysisResponse:
     validate_image(image)
-    if not limiter.try_acquire(user_id):
+    if not limiter.try_acquire(user_id, trigger):
         raise NarrationRateLimitedError()
 
     started = time.perf_counter()

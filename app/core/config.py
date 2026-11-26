@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # Límite por usuario (en memoria, por proceso, como el resto del rate limiting de ADR-310).
     narration_min_interval_seconds: float = 3.0
     narration_daily_limit: int = 1500
+    # SCRUM-40: la narración automática (trigger=auto) es más estricta y deja cupo al botón.
+    narration_auto_min_interval_seconds: float = 10.0
+    narration_auto_daily_limit: int = 1200
 
     @model_validator(mode="after")
     def _fake_narration_only_in_local(self) -> Self:

@@ -15,6 +15,12 @@ class ProfileUpdateError(AppError):
     message = "No se pudieron guardar los cambios. Tus datos siguen como estaban; intenta de nuevo."
 
 
+class PreferencesUpdateError(AppError):
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    code = "preferences_update_failed"
+    message = "No se pudieron guardar las preferencias. Siguen como estaban; intenta de nuevo."
+
+
 class InvalidCurrentPasswordError(AppError):
     # 403 y no 401: el access token es válido, y un 401 haría que el cliente renueve la sesión.
     status_code = status.HTTP_403_FORBIDDEN

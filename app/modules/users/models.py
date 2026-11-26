@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -33,3 +33,27 @@ class AuthSession(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class UserPreferences(Base):
+    """Preferencias de voz y vibración de la cuenta (Configurar Preferencias de Voz
+    Descriptiva y Configurar Retroalimentación Háptica). Es una copia de respaldo: el teléfono
+    las lee siempre de su almacenamiento local y las sincroniza en segundo plano, para
+    recuperarlas al reinstalar la app o entrar desde otro teléfono.
+    """
+
+    __tablename__ = "user_preferences"
+
+    # Una fila por cuenta. ON DELETE CASCADE: Eliminar Cuenta (SCRUM-7) las borra.
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    voice_language: Mapped[str] = mapped_column(String(16))
+    # Identificador de la voz del sistema; solo el teléfono sabe si está instalada.
+    voice_identifier: Mapped[str | None] = mapped_column(String(255))
+    speech_rate: Mapped[float] = mapped_column(Float)
+    haptics_enabled: Mapped[bool] = mapped_column(Boolean)
+    haptic_intensity: Mapped[str] = mapped_column(String(16))
+    # Eventos configurables apagados; las alertas de seguridad no se pueden apagar.
+    haptic_disabled_events: Mapped[list[str]] = mapped_column(JSON)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

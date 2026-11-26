@@ -39,6 +39,17 @@ def test_profile_contracts_document_errors(client):
     assert "UserProfileUpdate" in spec["components"]["schemas"]
 
 
+def test_preferences_contracts_document_errors(client):
+    spec = client.get("/openapi.json").json()
+    get = spec["paths"]["/users/me/preferences"]["get"]
+    put = spec["paths"]["/users/me/preferences"]["put"]
+
+    assert {"200", "401", "503"} <= get["responses"].keys()
+    assert {"200", "401", "422", "500", "503"} <= put["responses"].keys()
+    assert {"HTTPBearer": []} in put["security"]
+    assert {"PreferencesRead", "PreferencesUpdate"} <= spec["components"]["schemas"].keys()
+
+
 def test_docs_are_served(client):
     assert client.get("/docs").status_code == 200
 

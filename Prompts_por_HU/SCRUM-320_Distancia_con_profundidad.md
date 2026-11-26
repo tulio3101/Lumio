@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Responsable (Jira) | Samuel Gil |
-| Estado Jira | Por hacer (sus subtareas SCRUM-219 y SCRUM-349 están Finalizadas) |
+| Estado Jira | Finalizado |
 | Repositorio | `LumioFrontend` |
 | Commits | 4 (2026-10-27 → 2026-10-28) |
 | Base | Spike SCRUM-307 / ADR-307 (LiDAR y modo reducido sin LiDAR) |
@@ -61,8 +61,8 @@ que AVSpeechSynthesizer lea la coma decimal en español («uno coma cinco metros
 - En un iPhone con LiDAR: una silla a ~1,5 m se anuncia «a 1,5 metros» y al arrancar se oye
   «modo completo».
 - En un iPhone sin LiDAR: se oye «modo reducido» y las detecciones salen sin distancia.
-- **Pendiente:** cerrar la HU en Jira (sigue en Por hacer). La fusión de profundidad del corredor y
-  los desniveles se hicieron después, dentro de SCRUM-33 (`944435d`).
+- La fusión de profundidad del corredor y los desniveles se hicieron después, dentro de SCRUM-33
+  (`944435d`, `dba7322`, `971cbd5`).
 
 ## Commits cubiertos
 

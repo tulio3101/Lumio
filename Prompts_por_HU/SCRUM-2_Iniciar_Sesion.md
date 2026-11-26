@@ -5,7 +5,7 @@
 | Responsable (Jira) | Tulio Riaño |
 | Estado Jira | Finalizado |
 | Repositorios | `Lumio` (backend) y `LumioFrontend` (sesión en iOS) |
-| Commits | 5 (2026-10-26 → 2026-11-08) |
+| Commits | 11 (2026-10-26 → 2026-11-25) |
 | Depende de | SCRUM-1 (usuarios), SCRUM-317 |
 
 > Prompts reconstruidos a partir de los commits y de la HU en Jira; no son el historial literal del chat.
@@ -88,12 +88,61 @@ En la app conecta el inicio de sesión real:
 - SignOutService base para cerrar sesión desde Preferencias (se completa en SCRUM-5).
 ```
 
+### Prompt 6 · Iniciar sesión con Google en el backend (commit `4bd4f1f`, subtarea SCRUM-62)
+
+```text
+Implementa POST /users/login/google {"id_token"}: verifica el ID token de Google (firma con las
+llaves públicas de Google, emisor, vigencia y audiencia contra GOOGLE_CLIENT_IDS) y entra a la
+cuenta por el sub de Google. Si no existe, crea una cuenta sin contraseña con el correo verificado
+(201). Un correo que ya es de una cuenta con contraseña no se asocia solo (409
+google_account_conflict), porque el registro por correo no verifica el correo. Sin client IDs o
+sin llaves responde 503. El verificador es una dependencia de FastAPI: las pruebas del endpoint
+usan uno falso y las de la verificación firman tokens RSA locales, sin red.
+```
+
+### Prompt 7 · Cerrar el login con contraseña a las cuentas de Google (commit `1fcd7d0`)
+
+```text
+El login compara la contraseña contra un hash ficticio cuando la cuenta no tiene password_hash
+(cuentas solo de Google), para igualar el tiempo, pero emite tokens si esa comparación acierta. La
+contraseña ficticia está en el repo público, así que cualquiera que sepa el correo de una cuenta de
+Google podría entrar. Sigue comprobando el hash ficticio por el tiempo, pero que nunca autentique.
+Agrega la prueba en test_login.py.
+```
+
+### Prompt 8 · Asociar Google a una cuenta con contraseña (commit `3d7b92b`)
+
+```text
+Agrega POST /users/me/google {"id_token"}: con sesión iniciada, asocia la cuenta de Google con
+las mismas verificaciones que /users/login/google. Es la vía segura para el caso del 409: el access
+token ya prueba quién es el dueño, así que los correos no tienen que coincidir. Idempotente con la
+misma cuenta de Google; 409 google_already_linked si ya tiene otra y google_account_in_use si esa
+cuenta de Google es de otra cuenta de Lumio. Un token inválido es 403 (no 401) para que el cliente
+no renueve la sesión. GET /users/me devuelve google_linked.
+```
+
+### Prompt 9 · «Continuar con Google» en iOS (commits `87830ea`, `dd797bb` y `a1a7dda`)
+
+```text
+En la app, «Continuar con Google» abre Google con ASWebAuthenticationSession (OAuth con PKCE,
+state y nonce, sin SDK ni secreto de cliente), cambia el código por el ID token y lo envía a POST
+/users/login/google; los tokens de Lumio se guardan en Keychain como con correo. El client ID va en
+GoogleClientID del Info.plist; vacío, Google queda no disponible. Sin red no abre Google, y la
+cancelación, la falta de red y los errores se dicen por el AudioArbiter (P2, contexto
+google-sign-in) sin repetirlos con VoiceOver. Con el 409 explica que se entre con la contraseña y
+se asocie Google desde Mi cuenta, donde «Asociar cuenta de Google» llama a POST /users/me/google y
+se oculta si google_linked es true. Guarda el correo de Google en minúsculas, como el backend.
+Pruebas en GoogleSignInTests y docs/HU-iniciar-sesion-con-google.md.
+```
+
 ## Verificación final
 
 - `pytest -rs` pasa login, me y refresh contra Postgres.
 - En el iPhone: iniciar sesión, cerrar la app y abrirla sin red entra directo a Trayecto.
-- **Pendiente según Jira:** inicio de sesión con Google (subtarea SCRUM-62). `POST /users/login/google`
-  responde 501 y no hay commits que lo implementen.
+- `pytest tests/modules/users/test_login_google.py tests/modules/users/test_google_auth.py
+  tests/modules/users/test_link_google.py` y `swift test --filter GoogleSignInTests` pasan.
+- En el iPhone: «Continuar con Google» entra y crea la cuenta la primera vez. La subtarea SCRUM-62
+  sigue en *Por hacer* en Jira aunque el código está.
 
 ## Commits cubiertos
 
@@ -104,5 +153,11 @@ En la app conecta el inicio de sesión real:
 | `0670366` | Lumio | 2026-10-26 | SCRUM-2 HU: Add current user dependency and /me endpoint |
 | `545f2fd` | Lumio | 2026-10-26 | SCRUM-2 HU: Implement token refresh with rotation |
 | `5672935` | LumioFrontend | 2026-11-08 | SCRUM-9 HU: Sign in with email and keep session tokens in Keychain |
+| `4bd4f1f` | Lumio | 2026-11-25 | SCRUM-62 HU: Sign in and create accounts with Google |
+| `1fcd7d0` | Lumio | 2026-11-25 | SCRUM-62 Fix: Reject password login for accounts without a password |
+| `3d7b92b` | Lumio | 2026-11-25 | SCRUM-62 HU: Asociar una cuenta de Google a la cuenta de Lumio |
+| `87830ea` | LumioFrontend | 2026-11-25 | SCRUM-62 HU: Iniciar sesión con Google y asociarla a la cuenta de Lumio |
+| `dd797bb` | LumioFrontend | 2026-11-25 | SCRUM-62 Fix: Guardar en minúsculas el correo de la cuenta de Google |
+| `a1a7dda` | LumioFrontend | 2026-11-25 | SCRUM-62 Config: Client ID de Google para iOS |
 
 Las pantallas de bienvenida y formulario (`cff9ce9`) están en [SCRUM-1](SCRUM-1_Crear_Cuenta.md).

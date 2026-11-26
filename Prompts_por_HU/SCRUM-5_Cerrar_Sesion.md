@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Responsable (Jira) | Tulio Riaño |
-| Estado Jira | Finalizado (SCRUM-360: Por hacer, con arreglo en `ce437bb`) |
+| Estado Jira | Finalizado (el bug SCRUM-360 tiene su arreglo en `ce437bb`) |
 | Repositorios | `Lumio` (backend) y `LumioFrontend` |
 | Commits | 2 (2026-10-26 y 2026-11-24) |
 | Depende de | SCRUM-2 (sesiones y refresh) |
@@ -73,7 +73,8 @@ cuenta para la siguiente. Ajusta RouteFinishTests si cambia la firma del sincron
 
 - `pytest -rs`: logout revoca la sesión y los tokens dejan de servir.
 - En el iPhone: cerrar sesión con ruta activa apaga cámara e indicaciones y vuelve a la bienvenida.
-- **Pendiente:** mover SCRUM-360 a Finalizado en Jira tras validarlo en el iPhone.
+- Al traer develop volvió una asignación duplicada de `authenticationService` en AppDependencies;
+  `8b74bdc` deja solo la de SCRUM-360.
 
 ## Commits cubiertos
 
@@ -81,3 +82,4 @@ cuenta para la siguiente. Ajusta RouteFinishTests si cambia la firma del sincron
 |---|---|---|---|---|
 | `d602871` | Lumio | 2026-10-26 | Tulio Riaño | SCRUM-5 HU: Implement logout revoking the session |
 | `ce437bb` | LumioFrontend | 2026-11-24 | Samuel Gil | fix(SCRUM-360): teardown central de sesion; la expiracion no apaga la ruta activa |
+| `8b74bdc` | LumioFrontend | 2026-11-25 | Daniel Patiño | Quitar la asignación duplicada de authenticationService |

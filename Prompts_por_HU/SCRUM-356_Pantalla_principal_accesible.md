@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Responsable (Jira) | Néstor López |
-| Estado Jira | En revisión |
+| Estado Jira | Finalizado |
 | Repositorio | `LumioFrontend` (sin cambios de backend) |
 | Commits | 1 (2026-11-25) |
 | Integra | SCRUM-313 (punto de entrada), SCRUM-35, SCRUM-23, SCRUM-30 |
@@ -67,7 +67,7 @@ con la cortina de pantalla.
 - En el iPhone con VoiceOver y la cortina de pantalla: al abrir se oye el estado una vez; deslizar
   recorre el orden indicado; el Magic Tap pregunta el destino y crea la ruta; desde el rotor se
   activa «Emergencia».
-- La HU sigue En revisión; el doc deja compilación y pruebas pendientes de CI.
+- Compilación de Xcode y `swift test` en verde en el CI de develop.
 
 ## Commits cubiertos
 

@@ -23,6 +23,9 @@ SES_SENDER_EMAIL="$(param SES_SENDER_EMAIL 2>/dev/null || true)"
 # Modelo de Bedrock para la narración del entorno (ADR-308), p. ej.
 # us.anthropic.claude-haiku-5-5. Opcional: sin él la narración responde 503 narration_unavailable.
 NARRATION_MODEL_ID="$(param NARRATION_MODEL_ID 2>/dev/null || true)"
+# Client ID de OAuth de Google (iOS, y web si la hay), separados por comas. No es secreto.
+# Opcional: sin él POST /users/login/google responde 503 google_auth_unavailable.
+GOOGLE_CLIENT_IDS="$(param GOOGLE_CLIENT_IDS 2>/dev/null || true)"
 
 # 2. Archivo .env para Compose, legible solo por root.
 umask 077
@@ -48,6 +51,10 @@ if [ -n "$NARRATION_MODEL_ID" ]; then
     echo "NARRATION_BACKEND=bedrock"
     echo "NARRATION_MODEL_ID=$NARRATION_MODEL_ID"
   } >> .env
+fi
+
+if [ -n "$GOOGLE_CLIENT_IDS" ]; then
+  echo "GOOGLE_CLIENT_IDS=$GOOGLE_CLIENT_IDS" >> .env
 fi
 
 # 3. Descargar la imagen desde ECR con el rol de la instancia.

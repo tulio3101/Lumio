@@ -64,21 +64,3 @@ backend, infraestructura y audio), cuenta, rutas, seguridad, voz, accesibilidad,
 narración. Los spikes (SCRUM-305 a 311) no tienen archivo propio: sus decisiones están en los ADR
 y los prompts de cada HU los citan.
 
-## Diferencias entre Jira y los repos
-
-- Las 44 HU están en *Finalizado* en Jira, pero muchas de sus **subtareas** siguen en *Por hacer*
-  o *En revisión*. Por ejemplo, la SCRUM-62 (inicio de sesión con Google) y la SCRUM-68 (registro
-  con Google) están en *Por hacer*, aunque el código está en los commits `4bd4f1f`, `3d7b92b` y
-  `87830ea`.
-- El bug **SCRUM-360** (la cámara seguía activa tras cerrar sesión) ya no aparece en Jira; su
-  arreglo está en `ce437bb` y se documenta en [SCRUM-5](SCRUM-5_Cerrar_Sesion.md).
-- Algunos commits los hizo otra persona distinta del responsable en Jira: SCRUM-3 y SCRUM-312
-  (Néstor López), SCRUM-38 (Daniel Patiño), SCRUM-41 (Néstor López) y SCRUM-31 (Samuel Gil y
-  Daniel Patiño). Cada archivo lo indica.
-- `971cbd5` (Samuel Gil) mezcla trabajo de SCRUM-320, 36, 360, 321, 31 y 41; aparece en cada una.
-- Commits sin código de HU que se asignaron por contenido: `1665163` y `1b10ed3` → SCRUM-316;
-  `cff9ce9` → SCRUM-1/2; `426b78c` → SCRUM-30; `e5e1950`, `f10e9f3` → SCRUM-315;
-  `c1cbbee`, `54c614d` → SCRUM-27; `86619dc` → SCRUM-28; `da0bde3` → SCRUM-356;
-  `5a7d643`, `046079c` → SCRUM-27 y SCRUM-28; `813eb8e`, `c06a9ee` → SCRUM-3; `dba7322` →
-  SCRUM-33; `8722eae` → SCRUM-321; `8b74bdc` → SCRUM-5; `bac7fdc` → SCRUM-3.
-- Fuera de las HU quedan los commits iniciales de cada repo y `b1f3587` (esta carpeta).

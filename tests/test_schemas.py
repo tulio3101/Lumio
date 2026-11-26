@@ -75,3 +75,15 @@ def test_preferences_accept_turn_haptic_events():
         HapticEvent.TURN_LEFT,
         HapticEvent.TURN_RIGHT,
     ]
+
+
+def test_preferences_accept_narration_haptic_events():
+    # Disponibilidad de la Narración (SCRUM-41): la caída y la vuelta vibran y se pueden apagar.
+    preferences = PreferencesUpdate(
+        haptic_disabled_events=["narrationAvailable", "narrationUnavailable"]
+    )
+
+    assert set(preferences.haptic_disabled_events) == {
+        HapticEvent.NARRATION_UNAVAILABLE,
+        HapticEvent.NARRATION_AVAILABLE,
+    }

@@ -4,18 +4,37 @@ from typing import Annotated, Any
 from fastapi import APIRouter, File, Form, UploadFile, status
 
 from app.core.errors import ErrorResponse
+from app.modules.narration.availability import NarrationAvailabilityDep
 from app.modules.narration.rate_limit import NarrationRateLimiterDep
 from app.modules.narration.vlm import SceneDescriberDep
 from app.modules.users.dependencies import CurrentUserId
 from app.modules.vision_orchestration import service
 from app.modules.vision_orchestration.image import MAX_IMAGE_BYTES
 from app.modules.vision_orchestration.schemas import (
+    NarrationStatusResponse,
     NarrationTrigger,
     SceneLanguage,
     VisionAnalysisResponse,
 )
 
 router = APIRouter(prefix="/vision", tags=["vision-orchestration"])
+
+
+@router.get(
+    "/status",
+    response_model=NarrationStatusResponse,
+    summary="Disponibilidad de la narración",
+    description=(
+        "SCRUM-41. Dice si la narración puede describir fotos ahora, sin llamar al VLM ni gastar "
+        "cupo. No pide sesión: la app lo consulta cada pocos segundos durante la ruta para avisar "
+        "cuando la narración se cae o vuelve. `degraded` tras 3 fallas seguidas del VLM, durante "
+        "30 s desde la última; `not_configured` si el entorno no tiene VLM."
+    ),
+)
+def narration_status(
+    describer: SceneDescriberDep, availability: NarrationAvailabilityDep
+) -> NarrationStatusResponse:
+    return service.narration_status(describer, availability)
 
 _RESPONSES: dict[int | str, dict[str, Any]] = {
     status.HTTP_401_UNAUTHORIZED: {
@@ -66,6 +85,7 @@ def analyze_frame(
     user_id: CurrentUserId,
     describer: SceneDescriberDep,
     limiter: NarrationRateLimiterDep,
+    availability: NarrationAvailabilityDep,
     image: Annotated[UploadFile, File(description="Foto JPEG del entorno.")],
     captured_at: Annotated[
         datetime, Form(description="Cuándo se tomó la foto; la app descarta respuestas viejas.")
@@ -96,6 +116,7 @@ def analyze_frame(
             language=language,
             describer=describer,
             limiter=limiter,
+            availability=availability,
         )
     finally:
         del data

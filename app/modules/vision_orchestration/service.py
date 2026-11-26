@@ -9,9 +9,15 @@ import logging
 import time
 import uuid
 
+from app.modules.narration.availability import NarrationAvailability
 from app.modules.narration.rate_limit import NarrationRateLimiter
 from app.modules.narration.text import normalize_description
-from app.modules.narration.vlm import SceneDescriber, SceneDescriptionError, SceneDescriptionTimeout
+from app.modules.narration.vlm import (
+    SceneDescriber,
+    SceneDescriptionError,
+    SceneDescriptionTimeout,
+    UnconfiguredSceneDescriber,
+)
 from app.modules.vision_orchestration.exceptions import (
     ConsentRequiredError,
     ImageTooLargeError,
@@ -22,12 +28,35 @@ from app.modules.vision_orchestration.exceptions import (
 )
 from app.modules.vision_orchestration.image import MAX_IMAGE_BYTES, MAX_LONG_SIDE_PX, jpeg_size
 from app.modules.vision_orchestration.schemas import (
+    NarrationStatusReason,
+    NarrationStatusResponse,
     NarrationTrigger,
     SceneLanguage,
     VisionAnalysisResponse,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def narration_status(
+    describer: SceneDescriber, availability: NarrationAvailability
+) -> NarrationStatusResponse:
+    """SCRUM-41: si conviene enviar fotos ahora. No llama al VLM ni gasta cupo."""
+    if isinstance(describer, UnconfiguredSceneDescriber):
+        return NarrationStatusResponse(available=False, reason=NarrationStatusReason.NOT_CONFIGURED)
+    snapshot = availability.snapshot()
+    if snapshot.degraded:
+        return NarrationStatusResponse(
+            available=False,
+            reason=NarrationStatusReason.DEGRADED,
+            retry_after_seconds=snapshot.retry_after_seconds,
+        )
+    return NarrationStatusResponse(available=True, reason=NarrationStatusReason.AVAILABLE)
+
+
+def _record_failure(availability: NarrationAvailability | None) -> None:
+    if availability is not None:
+        availability.record_failure()
 
 
 def require_consent(consent_version: str | None) -> None:
@@ -53,6 +82,7 @@ def describe_scene(
     language: SceneLanguage,
     describer: SceneDescriber,
     limiter: NarrationRateLimiter,
+    availability: NarrationAvailability | None = None,
 ) -> VisionAnalysisResponse:
     validate_image(image)
     if not limiter.try_acquire(user_id, trigger):
@@ -63,9 +93,11 @@ def describe_scene(
         description = describer.describe(image, language=language.value)
     except SceneDescriptionTimeout as exc:
         logger.warning("Narración: el VLM tardó demasiado (%s)", exc)
+        _record_failure(availability)
         raise NarrationTimeoutError() from exc
     except SceneDescriptionError as exc:
         logger.warning("Narración no disponible: %s", exc)
+        _record_failure(availability)
         raise NarrationUnavailableError() from exc
     latency_ms = round((time.perf_counter() - started) * 1000)
 
@@ -73,7 +105,10 @@ def describe_scene(
     if not text:
         # Una respuesta vacía no se locuta: para la app es lo mismo que no tener narración.
         logger.warning("Narración: el VLM %s respondió sin texto", description.model)
+        _record_failure(availability)
         raise NarrationUnavailableError()
+    if availability is not None:
+        availability.record_success()
 
     logger.info(
         "Narración servida: disparo=%s modelo=%s bytes=%s latencia_ms=%s",

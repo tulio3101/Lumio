@@ -136,6 +136,9 @@ class HapticEvent(StrEnum):
     # Guiar Giros (SCRUM-312): un patrón distinto para cada lado.
     TURN_LEFT = "turnLeft"
     TURN_RIGHT = "turnRight"
+    # Disponibilidad de la Narración (SCRUM-41): la narración se cae o vuelve.
+    NARRATION_UNAVAILABLE = "narrationUnavailable"
+    NARRATION_AVAILABLE = "narrationAvailable"
 
 
 class PreferencesUpdate(BaseModel):

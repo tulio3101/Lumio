@@ -179,6 +179,36 @@ class PreferencesRead(PreferencesUpdate):
     )
 
 
+class PasswordResetRequest(BaseModel):
+    email: EmailStr = Field(
+        description="Correo de la cuenta con contraseña propia.", examples=["ana@example.com"]
+    )
+
+
+class PasswordResetAccepted(BaseModel):
+    message: str = Field(
+        default=(
+            "Si el correo corresponde a una cuenta con contraseña, te enviamos un código. "
+            "Revisa tu correo."
+        ),
+        description="Siempre el mismo texto: no revela si la cuenta existe.",
+    )
+
+
+class PasswordResetConfirm(BaseModel):
+    email: EmailStr
+    code: str = Field(
+        pattern=r"^\d{6}$",
+        description="Código de 6 dígitos recibido por correo.",
+        examples=["482915"],
+    )
+    new_password: str = Field(
+        min_length=8,
+        max_length=128,
+        description="Nueva contraseña; mismas reglas que al crear la cuenta.",
+    )
+
+
 class PasswordChange(BaseModel):
     current_password: str = Field(max_length=128, description="Contraseña actual.")
     new_password: str = Field(

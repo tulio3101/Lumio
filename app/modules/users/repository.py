@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
-from app.modules.users.models import AuthSession, User, UserPreferences
+from app.modules.users.models import AuthSession, PasswordResetCode, User, UserPreferences
 
 
 def get_by_email(db: Session, email: str) -> User | None:
@@ -88,4 +88,48 @@ def change_password(
         )
         .values(revoked_at=datetime.now(UTC))
     )
+    db.commit()
+
+
+def latest_reset_code(db: Session, user_id: uuid.UUID) -> PasswordResetCode | None:
+    return db.scalar(
+        select(PasswordResetCode)
+        .where(PasswordResetCode.user_id == user_id)
+        .order_by(PasswordResetCode.created_at.desc())
+        .limit(1)
+    )
+
+
+def replace_reset_code(
+    db: Session, user_id: uuid.UUID, code_hash: str, created_at: datetime, expires_at: datetime
+) -> PasswordResetCode:
+    """Solo vale el último código: borra los anteriores en la misma transacción."""
+    db.execute(delete(PasswordResetCode).where(PasswordResetCode.user_id == user_id))
+    code = PasswordResetCode(
+        user_id=user_id,
+        code_hash=code_hash,
+        attempts=0,
+        created_at=created_at,
+        expires_at=expires_at,
+    )
+    db.add(code)
+    db.commit()
+    db.refresh(code)
+    return code
+
+
+def register_failed_reset_attempt(db: Session, code: PasswordResetCode) -> None:
+    code.attempts += 1
+    db.commit()
+
+
+def reset_password(db: Session, user: User, password_hash: str) -> None:
+    """En una transacción: nueva contraseña, todas las sesiones revocadas y sin códigos."""
+    user.password_hash = password_hash
+    db.execute(
+        update(AuthSession)
+        .where(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None))
+        .values(revoked_at=datetime.now(UTC))
+    )
+    db.execute(delete(PasswordResetCode).where(PasswordResetCode.user_id == user.id))
     db.commit()

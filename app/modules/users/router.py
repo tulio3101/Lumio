@@ -4,11 +4,15 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.core.db import DbSession
 from app.core.errors import ErrorResponse
-from app.modules.users import service
+from app.modules.sos.email import EmailSenderDep
+from app.modules.users import password_reset, service
 from app.modules.users.dependencies import CurrentSession, CurrentUser
 from app.modules.users.schemas import (
     GoogleAuthRequest,
     PasswordChange,
+    PasswordResetAccepted,
+    PasswordResetConfirm,
+    PasswordResetRequest,
     PreferencesRead,
     PreferencesUpdate,
     RefreshRequest,
@@ -90,6 +94,62 @@ def logout(payload: RefreshRequest, db: DbSession) -> None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión no válida"
         ) from None
+
+
+@router.post(
+    "/password-reset",
+    response_model=PasswordResetAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Pedir código para recuperar la contraseña",
+    description=(
+        "Envía al correo un código de 6 dígitos si es de una cuenta con contraseña propia. "
+        "Responde siempre igual, exista o no la cuenta. El código vence a los 15 minutos, "
+        "admite 5 intentos y solo vale el último; entre dos pedidos debe pasar un minuto."
+    ),
+    responses={
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "model": ErrorResponse,
+            "description": "No se pudo procesar (`password_reset_failed`).",
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "model": ErrorResponse,
+            "description": "Persistencia no disponible; no se envió nada.",
+        },
+    },
+)
+def request_password_reset(
+    payload: PasswordResetRequest, db: DbSession, sender: EmailSenderDep
+) -> PasswordResetAccepted:
+    password_reset.request_reset(db, payload, sender)
+    return PasswordResetAccepted()
+
+
+@router.post(
+    "/password-reset/confirm",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Restablecer la contraseña con el código",
+    description=(
+        "Con el correo, el código y la nueva contraseña (8 a 128 caracteres). Cierra las "
+        "sesiones de todos los dispositivos y el código deja de servir. Después se inicia "
+        "sesión con la nueva contraseña."
+    ),
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "model": ErrorResponse,
+            "description": "Código incorrecto, vencido o agotado (`invalid_reset_code`).",
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "model": ErrorResponse,
+            "description": "No se pudo restablecer (`password_reset_failed`); sigue la misma.",
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "model": ErrorResponse,
+            "description": "Persistencia no disponible; no cambió nada.",
+        },
+    },
+)
+def confirm_password_reset(payload: PasswordResetConfirm, db: DbSession) -> None:
+    password_reset.confirm_reset(db, payload)
 
 
 _SESSION_ERRORS: dict[int | str, dict[str, Any]] = {

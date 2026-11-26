@@ -21,6 +21,19 @@ class PreferencesUpdateError(AppError):
     message = "No se pudieron guardar las preferencias. Siguen como estaban; intenta de nuevo."
 
 
+class InvalidResetCodeError(AppError):
+    # Igual para código incorrecto, vencido, agotado o correo sin cuenta: no revela nada.
+    status_code = status.HTTP_400_BAD_REQUEST
+    code = "invalid_reset_code"
+    message = "El código no es válido o ya venció. Pide uno nuevo."
+
+
+class PasswordResetError(AppError):
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    code = "password_reset_failed"
+    message = "No se pudo completar la recuperación. Tu contraseña sigue igual; intenta de nuevo."
+
+
 class InvalidCurrentPasswordError(AppError):
     # 403 y no 401: el access token es válido, y un 401 haría que el cliente renueve la sesión.
     status_code = status.HTTP_403_FORBIDDEN

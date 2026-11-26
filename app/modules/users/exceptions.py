@@ -47,6 +47,38 @@ class PasswordNotSetError(AppError):
     message = "Tu cuenta no tiene contraseña porque usas Google para iniciar sesión."
 
 
+class InvalidGoogleTokenError(AppError):
+    status_code = status.HTTP_401_UNAUTHORIZED
+    code = "invalid_google_token"
+    message = "No se pudo verificar tu cuenta de Google. Intenta de nuevo."
+
+
+class GoogleEmailNotVerifiedError(AppError):
+    status_code = status.HTTP_401_UNAUTHORIZED
+    code = "google_email_not_verified"
+    message = "Tu cuenta de Google no tiene un correo verificado."
+
+
+class GoogleAccountConflictError(AppError):
+    # No se vincula sola: el registro con correo no verifica el correo, así que quien creó
+    # esa cuenta pudo no ser el dueño. Se inicia sesión con la contraseña.
+    status_code = status.HTTP_409_CONFLICT
+    code = "google_account_conflict"
+    message = "Ya existe una cuenta con ese correo. Inicia sesión con tu correo y contraseña."
+
+
+class GoogleAuthUnavailableError(AppError):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    code = "google_auth_unavailable"
+    message = "El inicio de sesión con Google no está disponible. Intenta más tarde."
+
+
+class GoogleSignInError(AppError):
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    code = "google_sign_in_failed"
+    message = "No se pudo iniciar sesión con Google. Intenta de nuevo."
+
+
 class PasswordUnchangedError(AppError):
     status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
     code = "password_unchanged"

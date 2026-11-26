@@ -29,6 +29,7 @@ uvicorn app.main:app --reload
 
 | Método | Ruta | Uso |
 |---|---|---|
+| `POST` | `/users/login/google` | Iniciar sesión o crear cuenta con Google: `{"id_token"}` del SDK de Google. Se verifica firma, emisor, vigencia y audiencia (`GOOGLE_CLIENT_IDS`). La cuenta se reconoce por el `sub` de Google; si no existe se crea sin contraseña con el correo verificado. 200 o 201 (cuenta nueva) con el `TokenPair`. 401 `invalid_google_token` o `google_email_not_verified`, 409 `google_account_conflict` (el correo ya es de una cuenta con contraseña: no se vincula sola, porque el registro con correo no verifica el correo), 500 `google_sign_in_failed`, 503 `google_auth_unavailable` (sin configurar o sin acceso a las llaves de Google) |
 | `POST` | `/users/password-reset` | Recuperar Contraseña: `{"email"}`. Si es de una cuenta con contraseña propia, envía un código de 6 dígitos por correo (vence en 15 min, 5 intentos, solo vale el último, un pedido por minuto). Responde siempre 202 con el mismo mensaje, exista o no la cuenta (las cuentas solo Google no reciben código). 500 `password_reset_failed`, 503 |
 | `POST` | `/users/password-reset/confirm` | `{"email", "code", "new_password"}` (8–128). 204; se cierran las sesiones de todos los dispositivos y se inicia sesión con la nueva. 400 `invalid_reset_code` (incorrecto, vencido, agotado o correo sin cuenta: misma respuesta), 422, 500 `password_reset_failed`, 503 |
 | `GET` | `/users/me` | Cuenta del usuario: `email`, `display_name` y `phone` (los dos últimos pueden ser `null`) |
@@ -109,8 +110,16 @@ alerta: un riesgo nunca viene de la red, lo decide el loop de seguridad del tel�
 
 Errores: 401 `invalid_session`, 403 `consent_required`, 413 `image_too_large`, 422
 `invalid_image` (o un campo inválido), 429 `narration_rate_limited` (1 cada 3 s y 1.500 al día
-por usuario, en memoria), 503 `narration_unavailable` (Bedrock falló, está saturado o la
+por usuario, en memoria; las automáticas, 1 cada 10 s y 1.200 al día, ver abajo), 503 `narration_unavailable` (Bedrock falló, está saturado o la
 narración no está configurada), 504 `narration_timeout` (más de 4 s).
+
+**Solicitudes consecutivas (SCRUM-40).** La app pide una descripción sola cuando la escena cambia
+(`trigger=auto`) y el backend las trata aparte para controlar costo y datos: 1 cada 10 s y 1.200
+al día por usuario (`NARRATION_AUTO_MIN_INTERVAL_SECONDS`, `NARRATION_AUTO_DAILY_LIMIT`). El
+intervalo cuenta desde la última narración del usuario, sea de botón o automática, y las 300 del
+día que sobran del tope de 1.500 quedan para «Describir entorno», que siempre conserva su
+intervalo de 3 s. Una automática rechazada responde 429 sin llamar al VLM; la app la ignora sin
+avisar al usuario y espera antes de volver a intentar.
 
 **Privacidad.** La foto solo vive en memoria durante la solicitud: no se escribe en disco, base
 de datos ni S3, y Caddy limita `/vision/*` a 1100 KB para que el cuerpo nunca se pase a disco.

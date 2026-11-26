@@ -1,8 +1,8 @@
 from functools import lru_cache
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 
-from pydantic import model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Valor de ejemplo del repo (público): nunca debe firmar tokens fuera de local.
 INSECURE_JWT_SECRET = "change-me"
@@ -23,6 +23,17 @@ class Settings(BaseSettings):
     access_token_minutes: int = 15
     refresh_token_days: int = 30
 
+    # Iniciar sesión con Google: client ID de OAuth de las apps (iOS, y web si la hay)
+    # separados por comas. Solo se aceptan ID tokens emitidos para ellos. Vacío: 503.
+    google_client_ids: Annotated[list[str], NoDecode] = []
+
+    @field_validator("google_client_ids", mode="before")
+    @classmethod
+    def _split_client_ids(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [part.strip() for part in value.split(",") if part.strip()]
+        return value
+
     # Correo (alertas de emergencia). «log» solo escribe el correo en los logs y únicamente
     # sirve en local; en dev y prod hay que usar «ses» (ADR-310).
     email_backend: Literal["log", "ses"] = "log"
@@ -40,6 +51,9 @@ class Settings(BaseSettings):
     # Límite por usuario (en memoria, por proceso, como el resto del rate limiting de ADR-310).
     narration_min_interval_seconds: float = 3.0
     narration_daily_limit: int = 1500
+    # SCRUM-40: la narración automática (trigger=auto) es más estricta y deja cupo al botón.
+    narration_auto_min_interval_seconds: float = 10.0
+    narration_auto_daily_limit: int = 1200
 
     @model_validator(mode="after")
     def _fake_narration_only_in_local(self) -> Self:

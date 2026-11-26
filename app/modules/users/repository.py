@@ -19,6 +19,19 @@ def create_user(db: Session, email: str, password_hash: str) -> User:
     return user
 
 
+def get_by_google_sub(db: Session, google_sub: str) -> User | None:
+    return db.scalar(select(User).where(User.google_sub == google_sub))
+
+
+def create_google_user(db: Session, email: str, google_sub: str) -> User:
+    """Cuenta solo de Google: sin password_hash."""
+    user = User(email=email, google_sub=google_sub)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def create_session(db: Session, user_id: uuid.UUID) -> AuthSession:
     auth_session = AuthSession(user_id=user_id)
     db.add(auth_session)

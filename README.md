@@ -29,6 +29,8 @@ uvicorn app.main:app --reload
 
 | Método | Ruta | Uso |
 |---|---|---|
+| `POST` | `/users/password-reset` | Recuperar Contraseña: `{"email"}`. Si es de una cuenta con contraseña propia, envía un código de 6 dígitos por correo (vence en 15 min, 5 intentos, solo vale el último, un pedido por minuto). Responde siempre 202 con el mismo mensaje, exista o no la cuenta (las cuentas solo Google no reciben código). 500 `password_reset_failed`, 503 |
+| `POST` | `/users/password-reset/confirm` | `{"email", "code", "new_password"}` (8–128). 204; se cierran las sesiones de todos los dispositivos y se inicia sesión con la nueva. 400 `invalid_reset_code` (incorrecto, vencido, agotado o correo sin cuenta: misma respuesta), 422, 500 `password_reset_failed`, 503 |
 | `GET` | `/users/me` | Cuenta del usuario: `email`, `display_name` y `phone` (los dos últimos pueden ser `null`) |
 | `PATCH` | `/users/me` | Personalizar Cuenta (SCRUM-6): cambia solo los campos enviados; `null` o `""` los quita. `display_name`: 1–60 caracteres tras recortar y unir espacios, letras, espacios, `'`, `.` y `-`. `phone`: celular colombiano, 10 dígitos que empiezan por 3 (acepta espacios y guiones; se guarda sin ellos). El correo no se puede cambiar (otros campos: 422). Devuelve la cuenta. 422 datos inválidos, 500 `profile_update_failed`, 503 |
 | `GET` | `/users/me/preferences` | Preferencias de voz y vibración (copia de respaldo del teléfono). Sin guardar: las predeterminadas con `updated_at: null`. 401, 503 |

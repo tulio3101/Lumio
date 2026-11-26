@@ -64,3 +64,14 @@ def test_preferences_accept_spanish_variants_and_dedupe_events():
         HapticEvent.ROUTE_FINISHED,
         HapticEvent.ROUTE_READY,
     ]
+
+
+def test_preferences_accept_turn_haptic_events():
+    # Guiar Giros (SCRUM-312): izquierda y derecha vibran distinto y se pueden apagar.
+    preferences = PreferencesUpdate(haptic_disabled_events=["turnRight", "turnLeft", "routeReady"])
+
+    assert preferences.haptic_disabled_events == [
+        HapticEvent.ROUTE_READY,
+        HapticEvent.TURN_LEFT,
+        HapticEvent.TURN_RIGHT,
+    ]

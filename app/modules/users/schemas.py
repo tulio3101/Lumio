@@ -129,6 +129,9 @@ class HapticEvent(StrEnum):
     ROUTE_READY = "routeReady"
     ROUTE_FAILED = "routeFailed"
     ROUTE_FINISHED = "routeFinished"
+    # Guiar Giros (SCRUM-312): un patrón distinto para cada lado.
+    TURN_LEFT = "turnLeft"
+    TURN_RIGHT = "turnRight"
 
 
 class PreferencesUpdate(BaseModel):

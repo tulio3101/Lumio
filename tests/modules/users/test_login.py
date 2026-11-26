@@ -59,3 +59,17 @@ def test_failed_login_does_not_create_session(client, db):
     client.post("/users/login", json={**CREDENTIALS, "password": "otra-clave-1"})
 
     assert db.scalar(select(AuthSession)) is None
+
+
+def test_dummy_hash_password_never_signs_in_an_account_without_password(client, db):
+    """Regresión: la contraseña del hash señuelo (pública en el repo) daba acceso a
+    cualquier cuenta solo de Google conociendo su correo."""
+    db.add(User(email="google@example.com", google_sub="sub-1"))
+    db.commit()
+
+    response = client.post(
+        "/users/login", json={"email": "google@example.com", "password": "lumio-dummy-password"}
+    )
+
+    assert response.status_code == 401
+    assert db.scalar(select(AuthSession)) is None

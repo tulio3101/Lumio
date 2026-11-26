@@ -79,7 +79,11 @@ def issue_tokens(db: Session, user: User) -> TokenPair:
 def login(db: Session, payload: UserLogin) -> TokenPair:
     user = repository.get_by_email(db, normalize_email(payload.email))
     password_hash = user.password_hash if user else None
-    if not verify_password(payload.password, password_hash or _DUMMY_HASH) or user is None:
+    # Siempre se verifica (contra el hash señuelo si no hay uno real) para igualar tiempos,
+    # pero el señuelo nunca autentica: su contraseña está en el repo, que es público, y
+    # las cuentas solo de Google no tienen password_hash.
+    password_ok = verify_password(payload.password, password_hash or _DUMMY_HASH)
+    if user is None or password_hash is None or not password_ok:
         raise InvalidCredentials
     return issue_tokens(db, user)
 
